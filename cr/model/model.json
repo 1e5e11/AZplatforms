@@ -1,0 +1,170 @@
+{
+  "format": "azai-tfjs-dense-json-v1",
+  "source": "digit_model.pt",
+  "version": "24a0f57a0d60",
+  "dtype": "float32",
+  "alphabet": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz",
+  "input_shape": [
+    28,
+    28
+  ],
+  "architecture": [
+    784,
+    300,
+    180,
+    100,
+    62
+  ],
+  "layers": [
+    {
+      "name": "0",
+      "input": 784,
+      "output": 300,
+      "weight_offset": 0,
+      "weight_length": 235200,
+      "bias_offset": 235200,
+      "bias_length": 300
+    },
+    {
+      "name": "2",
+      "input": 300,
+      "output": 180,
+      "weight_offset": 235500,
+      "weight_length": 54000,
+      "bias_offset": 289500,
+      "bias_length": 180
+    },
+    {
+      "name": "4",
+      "input": 180,
+      "output": 100,
+      "weight_offset": 289680,
+      "weight_length": 18000,
+      "bias_offset": 307680,
+      "bias_length": 100
+    },
+    {
+      "name": "6",
+      "input": 100,
+      "output": 62,
+      "weight_offset": 307780,
+      "weight_length": 6200,
+      "bias_offset": 313980,
+      "bias_length": 62
+    }
+  ],
+  "epoch": 13200,
+  "dataset": "EMNIST ByClass",
+  "float_count": 314042,
+  "byte_count": 1256168,
+  "shards": [
+    {
+      "file": "weights-24a0f57a0d60-001.json",
+      "byte_offset": 0,
+      "byte_length": 73728,
+      "json_bytes": 98409
+    },
+    {
+      "file": "weights-24a0f57a0d60-002.json",
+      "byte_offset": 73728,
+      "byte_length": 73728,
+      "json_bytes": 98413
+    },
+    {
+      "file": "weights-24a0f57a0d60-003.json",
+      "byte_offset": 147456,
+      "byte_length": 73728,
+      "json_bytes": 98414
+    },
+    {
+      "file": "weights-24a0f57a0d60-004.json",
+      "byte_offset": 221184,
+      "byte_length": 73728,
+      "json_bytes": 98414
+    },
+    {
+      "file": "weights-24a0f57a0d60-005.json",
+      "byte_offset": 294912,
+      "byte_length": 73728,
+      "json_bytes": 98414
+    },
+    {
+      "file": "weights-24a0f57a0d60-006.json",
+      "byte_offset": 368640,
+      "byte_length": 73728,
+      "json_bytes": 98414
+    },
+    {
+      "file": "weights-24a0f57a0d60-007.json",
+      "byte_offset": 442368,
+      "byte_length": 73728,
+      "json_bytes": 98414
+    },
+    {
+      "file": "weights-24a0f57a0d60-008.json",
+      "byte_offset": 516096,
+      "byte_length": 73728,
+      "json_bytes": 98414
+    },
+    {
+      "file": "weights-24a0f57a0d60-009.json",
+      "byte_offset": 589824,
+      "byte_length": 73728,
+      "json_bytes": 98414
+    },
+    {
+      "file": "weights-24a0f57a0d60-010.json",
+      "byte_offset": 663552,
+      "byte_length": 73728,
+      "json_bytes": 98415
+    },
+    {
+      "file": "weights-24a0f57a0d60-011.json",
+      "byte_offset": 737280,
+      "byte_length": 73728,
+      "json_bytes": 98415
+    },
+    {
+      "file": "weights-24a0f57a0d60-012.json",
+      "byte_offset": 811008,
+      "byte_length": 73728,
+      "json_bytes": 98415
+    },
+    {
+      "file": "weights-24a0f57a0d60-013.json",
+      "byte_offset": 884736,
+      "byte_length": 73728,
+      "json_bytes": 98415
+    },
+    {
+      "file": "weights-24a0f57a0d60-014.json",
+      "byte_offset": 958464,
+      "byte_length": 73728,
+      "json_bytes": 98415
+    },
+    {
+      "file": "weights-24a0f57a0d60-015.json",
+      "byte_offset": 1032192,
+      "byte_length": 73728,
+      "json_bytes": 98416
+    },
+    {
+      "file": "weights-24a0f57a0d60-016.json",
+      "byte_offset": 1105920,
+      "byte_length": 73728,
+      "json_bytes": 98416
+    },
+    {
+      "file": "weights-24a0f57a0d60-017.json",
+      "byte_offset": 1179648,
+      "byte_length": 73728,
+      "json_bytes": 98416
+    },
+    {
+      "file": "weights-24a0f57a0d60-018.json",
+      "byte_offset": 1253376,
+      "byte_length": 2792,
+      "json_bytes": 3835
+    }
+  ]
+}

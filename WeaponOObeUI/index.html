@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="referrer" content="no-referrer" />
+  <title>WEAPON OOBE UI</title>
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css" crossorigin="anonymous" />
+  <link rel="stylesheet" href="./md-renderer.css?v=2026-09-28-1" />
+  <link rel="stylesheet" href="./app.css?v=2026-09-28-1" />
+  <script defer src="https://cdn.jsdelivr.net/npm/marked@15.0.7/lib/marked.umd.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/dompurify@3.2.6/dist/purify.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.11.1/build/highlight.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js" crossorigin="anonymous"></script>
+  <script defer src="./md-renderer.js?v=2026-09-28-1"></script>
+  <script defer src="./app.js?v=2026-09-28-1"></script>
+
+</head>
+<body>
+<div class="az-ui" id="app">
+  <svg style="display:none" aria-hidden="true">
+    <defs>
+      <filter id="az-glass" x="0%" y="0%" width="100%" height="100%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.008 0.008" numOctaves="2" seed="114514" result="noise" />
+        <feGaussianBlur in="noise" stdDeviation="2" result="blurred" />
+        <feDisplacementMap in="SourceGraphic" in2="blurred" scale="20" xChannelSelector="R" yChannelSelector="G" />
+      </filter>
+    </defs>
+  </svg>
+
+  <section class="az-panel top-tools">
+    <div class="tool-row primary">
+      <select id="modelQuick" class="az-select w-220" aria-label="Model"></select>
+      <button id="moreBtn" class="az-button" aria-expanded="false" aria-controls="quickPanel">More</button>
+    </div>
+    <div id="quickPanel" class="quick-panel" aria-hidden="true">
+      <div class="quick-actions">
+        <button id="showSidebarBtn" class="az-button" type="button" aria-controls="historyPanel" aria-expanded="false">Show sidebar</button>
+        <button id="menuNewChatBtn" class="az-button" type="button">New chat</button>
+        <button id="settingsBtn" class="az-button" type="button">Settings</button>
+        <button id="themeBtn" class="az-button" type="button">Dark</button>
+      </div>
+      <details class="quick-advanced">
+        <summary id="quickAdvancedTitle">Chat &amp; parameters</summary>
+        <div class="quick-actions">
+          <button id="renameBtn" class="az-button" type="button">Rename</button>
+          <button id="exportOneBtn" class="az-button" type="button">Export chat</button>
+          <button id="exportAllBtn" class="az-button" type="button">Export all</button>
+          <button id="importBtn" class="az-button" type="button">Import</button>
+          <button id="clearDraftBtn" class="az-button" type="button">Clear input</button>
+        </div>
+        <div class="quick-row">
+        <span class="tool-label" id="providerQuickLabel">Provider</span>
+        <select id="providerQuick" class="az-select w-120">
+          <option value="opencode">OpenCode Zen</option>
+          <option value="openai">OpenAI</option>
+          <option value="deepseek">DeepSeek</option>
+          <option value="glm">智谱 GLM</option>
+          <option value="kimi">Moonshot Kimi</option>
+          <option value="siliconflow">硅基流动</option>
+          <option value="custom">Custom API</option>
+        </select>
+        <button id="refreshModelsBtn" class="az-button">Refresh models</button>
+        <select id="languageQuick" class="az-select w-80" aria-label="Language">
+          <option value="zh">中文</option>
+          <option value="en">English</option>
+        </select>
+      </div>
+      <div class="quick-row">
+        <span class="tool-label" id="temperatureQuickLabel">Temperature</span>
+        <input id="temperatureQuick" class="az-input w-80" type="number" min="0" max="2" step="0.1" />
+        <span class="tool-label" id="streamQuickLabel">Stream</span>
+        <select id="streamQuick" class="az-select w-80">
+          <option value="true">on</option>
+          <option value="false">off</option>
+        </select>
+      </div>
+      <div class="quick-row endpoint-row">
+        <span class="tool-label" id="endpointQuickLabel">Endpoint</span>
+        <input id="endpointQuick" class="az-input" readonly />
+        <span class="tool-label" id="storageQuickLabel">Storage</span>
+        <span class="accent">IndexedDB</span>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <main class="chat-panel">
+    <div class="messages" id="messages"></div>
+    <div id="dropOverlay" class="drop-overlay">Drop files or images here</div>
+    <div class="composer">
+      <textarea id="promptInput" class="chat-input" placeholder="Message…" aria-label="Message" autofocus></textarea>
+      <button id="sendBtn" class="az-button send-button">Send</button>
+      <div id="attachmentStrip" class="attachment-strip"></div>
+      <input id="attachmentInput" type="file" multiple hidden />
+      <div class="composer-tools">
+        <button id="attachBtn" class="az-button">Attach</button>
+        <button id="thinkingBtn" class="az-button" type="button" aria-pressed="false">Thinking</button>
+        <span class="desktop-hint" id="composerHint">Enter send · Shift+Enter newline · paste / drag files</span>
+        <span class="spacer"></span>
+        <button id="stopBtn" class="az-button" disabled>Stop</button>
+        <span id="tokenHint" class="muted">0 tokens</span>
+      </div>
+    </div>
+  </main>
+
+  <aside id="historyPanel" class="az-panel history-panel">
+    <div class="sidebar-brand"><span class="sidebar-brand-name">WEAPON <small>OOBE UI</small></span><button id="toggleSidebarBtn" class="az-button sidebar-collapse" type="button" aria-controls="historyPanel" aria-expanded="true" aria-label="收起侧栏">‹</button></div>
+    <button id="newChatBtn" class="az-button sidebar-new">New</button>
+    <div class="panel-title" id="historyPanelTitle">History</div>
+    <input id="importFile" type="file" accept="application/json" hidden />
+    <input id="historySearch" class="az-input history-search" placeholder="search chats" />
+    <div id="historyList" class="history-list"></div>
+    <details class="session-details">
+      <summary id="sessionPanelTitle">Session</summary>
+      <div class="info-body">
+        <div class="status-line"><span id="apiDot" class="status-dot"></span><span id="apiStatus">API not configured</span></div>
+        <div><span id="infoProviderLabel">Provider</span>: <span id="infoProvider" class="accent">OpenCode Zen</span></div>
+        <div><span id="infoModelLabel">Model</span>: <span id="infoModel" class="accent">—</span></div>
+        <div><span id="infoMessagesLabel">Messages</span>: <span id="infoMessages">0</span></div>
+        <div><span id="infoTokensLabel">Tokens</span>: <span id="infoTokens" class="accent">0</span></div>
+        <div><span id="infoUpdatedLabel">Updated</span>: <span id="infoUpdated">—</span></div>
+        <div id="renderingNote" class="muted">Markdown is sanitized before rendering. LaTeX is rendered with KaTeX.</div>
+      </div>
+    </details>
+  </aside>
+  <div id="sidebarResizeHandle" class="sidebar-resizer" role="separator" aria-orientation="vertical" aria-label="调整侧栏宽度" aria-valuemin="210" aria-valuemax="420" aria-valuenow="256" tabindex="0"></div>
+
+  <div id="bottomStatus" class="bottom-status">Ready · conversations stay in this browser</div>
+
+  <section id="settingsModal" class="az-panel modal" aria-modal="true" role="dialog">
+    <button id="settingsClose" class="modal-close" aria-label="close">X</button>
+    <div class="modal-title" id="settingsTitle">Settings</div>
+    <div class="settings-list">
+      <details class="settings-group" open>
+        <summary id="basicSettingsSummary">Basic</summary>
+        <div class="setting-row">
+          <label for="languageSetting" id="languageSettingLabel">Language</label>
+          <select id="languageSetting" class="az-select">
+            <option value="zh">中文</option>
+            <option value="en">English</option>
+          </select>
+        </div>
+        <div class="setting-row">
+          <label for="providerSetting" id="providerSettingLabel">Provider</label>
+          <select id="providerSetting" class="az-select">
+            <option value="opencode">OpenCode Zen</option>
+            <option value="openai">OpenAI</option>
+            <option value="deepseek">DeepSeek</option>
+            <option value="glm">智谱 GLM</option>
+            <option value="kimi">Moonshot Kimi</option>
+            <option value="siliconflow">硅基流动</option>
+            <option value="custom">Custom OpenAI-compatible</option>
+          </select>
+        </div>
+        <div class="setting-row">
+          <label for="modelSetting" id="modelSettingLabel">Model</label>
+          <select id="modelSetting" class="az-select"></select>
+        </div>
+        <div class="setting-row">
+          <label for="customModelSetting" id="customModelSettingLabel">Custom model</label>
+          <input id="customModelSetting" class="az-input" list="modelPresets" placeholder="model-id" />
+          <datalist id="modelPresets">
+            <option value="gpt-5.2"></option>
+            <option value="deepseek-chat"></option>
+            <option value="glm-4.5-flash"></option>
+            <option value="kimi-k3"></option>
+            <option value="deepseek-ai/DeepSeek-V4-Flash"></option>
+          </datalist>
+        </div>
+        <div class="setting-row">
+          <label for="themeSetting" id="themeSettingLabel">Appearance</label>
+          <select id="themeSetting" class="az-select">
+            <option value="system">System</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </div>
+      </details>
+      <details class="settings-group">
+        <summary id="connectionSettingsSummary">Connection &amp; key</summary>
+        <div class="setting-row">
+          <label for="apiBaseSetting" id="apiBaseSettingLabel">API endpoint</label>
+          <input id="apiBaseSetting" class="az-input" placeholder="https://…/v1/chat/completions" />
+        </div>
+        <div class="setting-note" id="endpointSettingNote">Use the full Chat Completions endpoint, not only the /v1 base URL.</div>
+        <div class="setting-row">
+          <label for="transportSetting" id="transportSettingLabel">Connection</label>
+          <select id="transportSetting" class="az-select">
+            <option value="auto">Auto (OpenCode → same-origin relay)</option>
+            <option value="direct">Browser direct</option>
+            <option value="proxy">Proxy / same-origin relay</option>
+          </select>
+        </div>
+        <div class="setting-row">
+          <label for="proxyUrlSetting" id="proxyUrlSettingLabel">Proxy URL</label>
+          <input id="proxyUrlSetting" class="az-input" placeholder="/api/proxy" />
+        </div>
+        <div class="setting-note" id="proxySettingNote">Public sites use same-origin /api/proxy; local use can use the bundled Python relay.</div>
+        <div class="setting-row">
+          <label for="apiKeySetting" id="apiKeySettingLabel">API key</label>
+          <input id="apiKeySetting" class="az-input" type="password" autocomplete="off" placeholder="sk-…" />
+        </div>
+        <div class="setting-row">
+          <label for="rememberKeySetting" id="rememberKeySettingLabel">Remember key</label>
+          <select id="rememberKeySetting" class="az-select">
+            <option value="false">No</option>
+            <option value="true">Yes, in this browser</option>
+          </select>
+        </div>
+        <div class="setting-note" id="keySettingNote">A remembered key is stored locally in IndexedDB. Any script running on the same origin can potentially access it.</div>
+      </details>
+      <details class="settings-group">
+        <summary id="generationSettingsSummary">Generation</summary>
+        <div class="setting-row">
+          <label for="temperatureSetting" id="temperatureSettingLabel">Temperature</label>
+          <input id="temperatureSetting" class="az-input" type="number" min="0" max="2" step="0.1" />
+        </div>
+        <div class="setting-row">
+          <label for="streamSetting" id="streamSettingLabel">Streaming</label>
+          <select id="streamSetting" class="az-select">
+            <option value="true">On</option>
+            <option value="false">Off</option>
+          </select>
+        </div>
+        <div class="setting-row" style="min-height:96px">
+          <label for="systemPromptSetting" id="systemPromptSettingLabel">System prompt</label>
+          <textarea id="systemPromptSetting" class="az-input" placeholder="optional system prompt"></textarea>
+        </div>
+      </details>
+    </div>
+    <div class="modal-actions">
+      <button id="testApiBtn" class="az-button">Test API</button>
+      <button id="saveSettingsBtn" class="az-button">Save</button>
+    </div>
+  </section>
+
+  <section id="renameBox" class="az-panel rename-box">
+    <div class="panel-title" id="renameBoxTitle">Rename chat</div>
+    <input id="renameInput" class="az-input" maxlength="100" />
+    <div class="rename-actions">
+      <button id="renameCancel" class="az-button">Cancel</button>
+      <button id="renameSave" class="az-button">Save</button>
+    </div>
+  </section>
+
+  <div id="toast" class="toast"></div>
+</div>
+
+</body>
+</html>
+

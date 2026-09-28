@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>az 手写数字与字母识别</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="./style.css?v=json-shards-v3">
+  <script defer src="./vendor/tf.min.js"></script>
+  <script defer src="./app.js?v=json-shards-v3"></script>
+</head>
+<body>
+<main>
+  <div class="title-row">
+    <h1>手写数字与字母识别</h1>
+    <div class="model-status">
+      <span id="model-state">正在加载模型…</span>
+      <div class="model-progress" aria-label="模型加载进度">
+        <progress id="model-progress-bar" max="100" value="0">0%</progress>
+        <span id="model-progress-text">准备加载</span>
+      </div>
+    </div>
+  </div>
+  <p class="instruction">写一个 0–9、A–Z 或 a–z 字符，然后点击识别；识别成功后可继续写下一个字符。<span id="dataset-summary">正在加载静态模型…</span></p>
+  <div class="workspace">
+    <section aria-label="手写输入">
+      <div class="canvas-wrap">
+        <canvas id="drawing" width="280" height="280" aria-label="手写字符画布"></canvas>
+        <span id="hint">在这里写一个字符</span>
+      </div>
+      <div class="actions">
+        <button id="clear" type="button">清空</button>
+        <button id="predict" class="primary" type="button" disabled>识别</button>
+      </div>
+    </section>
+    <section class="output" aria-label="识别结果">
+      <div class="output-heading">
+        <h2>累计识别结果</h2>
+        <button id="clear-result" class="text-button" type="button">清空结果</button>
+      </div>
+      <div id="character" aria-live="polite">—</div>
+      <p id="message" role="status" aria-live="polite">等待输入</p>
+      <figure>
+        <canvas id="preview" width="28" height="28" aria-label="浏览器预处理后的 28×28 图像"></canvas>
+        <figcaption>模型输入 · 28×28</figcaption>
+      </figure>
+      <div class="preview-history-wrap">
+        <h3>历史模型输入</h3>
+        <div id="preview-history" class="preview-history" aria-label="历史预处理图像"></div>
+      </div>
+    </section>
+  </div>
+  <section class="probabilities" aria-labelledby="probabilities-title">
+    <div class="probability-heading">
+      <h2 id="probabilities-title">62 类 Softmax</h2>
+      <span>0–9 · A–Z · a–z</span>
+    </div>
+    <div id="probability-list" class="probability-list"></div>
+  </section>
+</main>
+</body>
+</html>
