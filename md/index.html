@@ -5,8 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="referrer" content="no-referrer">
   <title>墨页 · Markdown 阅读与编辑</title>
-  <script>if (['md','src'].some(key => new URLSearchParams(location.search).has(key) || new URLSearchParams(location.hash.slice(1)).has(key))) document.documentElement.classList.add('reader');</script>
+  <script>
+    (() => {
+      const root = document.documentElement;
+      let theme = '';
+      try { theme = localStorage.getItem('moye-theme') || ''; } catch { /* Storage may be unavailable. */ }
+      root.dataset.theme = theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      if (['md','src'].some(key => new URLSearchParams(location.search).has(key) || new URLSearchParams(location.hash.slice(1)).has(key))) root.classList.add('reader');
+    })();
+  </script>
   <link rel="stylesheet" href="vendor/katex.min.css">
+  <link rel="stylesheet" href="md-renderer.css">
   <link rel="stylesheet" href="styles.css">
   <style id="codeTheme">
     .hljs{color:#242124;background:transparent}
@@ -19,19 +28,33 @@
     .hljs-meta,.hljs-deletion{color:#9a3049}
     .hljs-emphasis{font-style:italic}.hljs-strong{font-weight:bold}
     .hljs-link{text-decoration:underline}
+    [data-theme=dark] .hljs{color:#e8e0dd}
+    [data-theme=dark] .hljs-comment,[data-theme=dark] .hljs-quote{color:#9f9597}
+    [data-theme=dark] .hljs-keyword,[data-theme=dark] .hljs-selector-tag,[data-theme=dark] .hljs-tag,[data-theme=dark] .hljs-doctag{color:#f0a6b5}
+    [data-theme=dark] .hljs-string,[data-theme=dark] .hljs-regexp,[data-theme=dark] .hljs-addition,[data-theme=dark] .hljs-template-tag{color:#a9c99f}
+    [data-theme=dark] .hljs-number,[data-theme=dark] .hljs-literal,[data-theme=dark] .hljs-symbol,[data-theme=dark] .hljs-bullet{color:#d7b27f}
+    [data-theme=dark] .hljs-title,[data-theme=dark] .hljs-section,[data-theme=dark] .hljs-selector-class,[data-theme=dark] .hljs-selector-id{color:#cdb1dc}
+    [data-theme=dark] .hljs-built_in,[data-theme=dark] .hljs-type,[data-theme=dark] .hljs-attr,[data-theme=dark] .hljs-attribute,[data-theme=dark] .hljs-variable,[data-theme=dark] .hljs-name{color:#9fc6d7}
+    [data-theme=dark] .hljs-meta,[data-theme=dark] .hljs-deletion{color:#e68ea3}
+    @media print{[data-theme=dark] .hljs,[data-theme=dark] .hljs *{color:#242124!important}}
   </style>
   <script defer src="vendor/marked.umd.js"></script>
   <script defer src="vendor/purify.min.js"></script>
   <script defer src="vendor/highlight.min.js"></script>
   <script defer src="vendor/katex.min.js"></script>
+  <script defer src="md-renderer.js"></script>
   <script defer src="app.js"></script>
 </head>
 <body>
   <svg style="display:none" aria-hidden="true"><defs><filter id="az-glass" x="0%" y="0%" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="0.008 0.008" numOctaves="2" seed="114514" result="noise"/><feGaussianBlur in="noise" stdDeviation="2" result="blurred"/><feDisplacementMap in="SourceGraphic" in2="blurred" scale="20" xChannelSelector="R" yChannelSelector="G"/></filter></defs></svg>
-  <div class="workspace" id="workspace">
+  <div class="workspace" id="workspace" data-mode="edit">
     <header class="toolbar">
       <div class="brand"><h1>墨页</h1><span>Markdown / 阅读与编辑</span></div>
-      <div class="actions"><button id="openFile">打开文件</button><button id="example">示例</button><button id="clear">清空</button><button id="copyHtml">复制 HTML</button><button id="share">复制阅读链接</button></div>
+      <nav class="mode-switch" aria-label="显示模式">
+        <button id="editMode" type="button" aria-pressed="true">编辑模式</button>
+        <button id="viewMode" type="button" aria-pressed="false">查看模式</button>
+      </nav>
+      <div class="actions"><button id="openFile">打开文件</button><button id="example">示例</button><button id="clear">清空</button><button id="copyHtml">复制 HTML</button><button id="share">复制阅读链接</button><button id="themeToggle" type="button" aria-pressed="false">深色</button></div>
       <form id="sourceForm"><label for="source">文件地址</label><input id="source" placeholder="https://example.com/readme.md 或 ./foods.md" autocomplete="off"><button type="submit">载入</button><a href="README.md" id="help">阅读规范 ↗</a></form>
       <input type="file" id="file" accept=".md,.markdown,text/markdown,text/plain" hidden>
     </header>
@@ -57,6 +80,16 @@
       </aside>
     </main>
     <footer><span id="status" role="status">就绪</span><span>文字在这里，安静成页。</span></footer>
+    <div class="view-controls" aria-label="查看模式工具">
+      <details class="view-outline" id="viewOutlinePanel">
+        <summary>目录 <span id="viewHeadingCount">0 节</span></summary>
+        <nav id="viewOutline" aria-label="文档目录"></nav>
+      </details>
+      <details class="view-more" id="viewMore">
+        <summary aria-label="打开更多操作" title="更多操作">•••</summary>
+        <div class="view-more-menu"><button id="returnToEdit" type="button">进入编辑模式</button><button id="viewThemeToggle" type="button" aria-pressed="false">切换深色模式</button></div>
+      </details>
+    </div>
   </div>
   <main id="readerRoot" class="reader-root" hidden><article class="markdown" id="readerDocument"></article></main>
   <noscript>请启用 JavaScript 以显示 Markdown 文档。</noscript>
