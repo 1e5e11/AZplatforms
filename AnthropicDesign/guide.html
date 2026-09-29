@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#ECE9E0" />
+    <meta name="description" content="Anthropic 风格中文前端设计规范详解：四种模式、所有基础颜色与字体、43 类组件索引、Dashboard、Logo 与系统规则。" />
+    <title>设计规范手册 · Anthropic Style CN</title>
+    <link rel="stylesheet" href="assets/fonts/fonts.css" />
+    <link rel="stylesheet" href="assets/base.css" />
+    <link rel="stylesheet" href="guide.css" />
+    <script src="guide.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#guide-main">跳转到手册正文</a>
+    <header class="guide-header">
+      <a class="guide-brand" href="index.html"><span class="guide-brand-mark" aria-hidden="true">✳</span><strong>anthropic</strong><span>/ style guide</span></a>
+      <div class="guide-header-right"><span>中文设计规范 · 完整导览</span><a href="index.html">返回首页 ↗</a></div>
+    </header>
+    <div class="guide-layout">
+      <aside class="guide-sidebar" aria-label="手册目录">
+        <div class="sidebar-title">CONTENTS <span>01—10</span></div>
+        <nav>
+          <a href="#overview">概览与接入</a>
+          <a href="#scenarios">四种场景模式</a>
+          <a href="#special-scenes">专项场景</a>
+          <a href="#colors">完整色彩系统</a>
+          <a href="#typography">字体与排版</a>
+          <a href="#layout-tokens">间距与尺寸</a>
+          <a href="#components">组件索引</a>
+          <a href="#systems">系统规范</a>
+          <a href="#visual-language">视觉模式与 Logo</a>
+          <a href="#sources">原始文档</a>
+        </nav>
+        <div class="sidebar-note"><span>✳</span><p>以下数值取自本仓库的 <code>assets/base.css</code>；专项实现规则来自 <code>references/</code>。</p></div>
+      </aside>
+      <main class="guide-main" id="guide-main">
+        <section class="guide-intro" id="overview" aria-labelledby="overview-title">
+          <div class="guide-eyebrow">THE COMPLETE FIELD GUIDE <span>2026 / CN</span></div>
+          <h1 id="overview-title">一套设计语言，<br /><em>从原则到落地。</em></h1>
+          <p class="intro-lead">这份手册把仓库中的设计规则整理成可直接查阅的前端说明。先选择场景，再选用 token 和现有组件；每个专题都标注用途、使用方式与对应源码。</p>
+          <div class="intro-facts"><div><strong>04</strong><span>基础场景模式</span></div><div><strong>21</strong><span>核心颜色 token</span></div><div><strong>11</strong><span>系统规范专题</span></div></div>
+          <div class="guide-callout"><strong>使用顺序</strong><p>判断页面属于哪种模式 → 引入字体和基础 token → 按用途选颜色与字体 → 查找现有组件 → 根据响应式、状态与可访问性规则检查。</p></div>
+          <div class="subhead-row"><h2>快速接入</h2><span>START HERE</span></div>
+          <p>本仓库已内置拉丁字体文件和基础 CSS。中文字体可按项目需求加载霞鹜文楷、思源黑体，或使用系统字体兜底。</p>
+          <div class="code-example"><div class="code-example-head"><span>HTML · 引入顺序</span><button type="button" class="copy-code" data-copy-target="quickstart-code">复制代码</button></div><pre id="quickstart-code"><code>&lt;link rel="stylesheet" href="assets/fonts/fonts.css"&gt;
+&lt;link rel="stylesheet" href="assets/base.css"&gt;
+
+&lt;!-- 中文标题 / 正文 / UI 分别使用对应字体栈 --&gt;
+&lt;h1 class="hero-title"&gt;让技术有人的温度&lt;/h1&gt;
+&lt;style&gt;
+  body { background: var(--color-bg-base); }
+  .hero-title {
+    color: var(--color-text-primary);
+    font-family: var(--font-display-cn);
+    line-height: var(--leading-cn-tight);
+  }
+&lt;/style&gt;</code></pre></div>
+          <p class="guide-fine">本页面用于解释仓库规范。中文 WebFont 未包含在仓库中，因此页面会按 <code>base.css</code> 的字体栈回退到设备字体；若需要跨平台一致的中文字形，请按<a href="references/typography-cn.md">中文排版规范</a>加载或子集化字体。</p>
+        </section>
+
+        <section class="guide-section" id="scenarios" aria-labelledby="scenarios-title">
+          <div class="guide-section-head"><span>01 / SCENARIOS</span><h2 id="scenarios-title">四种基础场景</h2><p>模式决定布局密度、字体重心和视觉力度。颜色 token 保持一致，按场景调整使用权重。</p></div>
+          <div class="scenario-grid">
+            <article class="scenario-card"><div class="scenario-number">01 / DEFAULT</div><h3>默认模式</h3><p>用于内容页、产品介绍、普通功能页面和阅读型界面。</p><dl><div><dt>布局</dt><dd>区块间距至少 <code>--space-16</code>（64px）；卡片内距至少 <code>--space-6</code>（24px）。</dd></div><div><dt>字体</dt><dd>标题用 <code>--font-display-cn</code>，界面控件用 <code>--font-heading-cn</code>，长文用 <code>--font-body-cn</code>。</dd></div><div><dt>色彩</dt><dd>米色底 + 浅色内容面板，橙色只提示主要行动和重点。</dd></div><div><dt>使用方法</dt><dd>正文控制在 65ch 内，单屏最多 3 层视觉重点；以不对称留白建立节奏。</dd></div></dl><a href="SKILL.md">查看默认规则 ↗</a></article>
+            <article class="scenario-card"><div class="scenario-number">02 / BRAND</div><h3>品牌增强</h3><p>用于官网首页、落地页、营销页、品牌专题与宣传场景。</p><dl><div><dt>布局</dt><dd>可以放大标题与负空间，让主视觉略微打破网格。</dd></div><div><dt>字体</dt><dd>大幅使用衬线标题，配少量无衬线说明与导航。</dd></div><div><dt>色彩</dt><dd>可使用最多 2 色的受控渐变，整页不超过 3 个渐变区域；主 CTA 仍用暖橙。</dd></div><div><dt>使用方法</dt><dd>用一处鲜明的排版或几何图形做记忆点，动效优先变换 <code>transform</code> 与 <code>opacity</code>。</dd></div></dl><a href="references/design-rules.md">查看模式隔离 ↗</a></article>
+            <article class="scenario-card"><div class="scenario-number">03 / DATA</div><h3>数据密集</h3><p>用于 Dashboard、监控、分析报表、指标与图表页面。</p><dl><div><dt>布局</dt><dd>区块间距约 <code>--space-10</code>（40px）；卡片内距可收至 <code>--space-4</code>（16px）。</dd></div><div><dt>字体</dt><dd>关键数字用衬线，辅助数字用等宽体；开启 <code>tabular-nums</code>。</dd></div><div><dt>色彩</dt><dd>边界提高到 <code>--color-border-default</code>；图表系列按橙、灰蓝、橄榄绿、沙棕、灰排序。</dd></div><div><dt>使用方法</dt><dd>一屏突出最多 3 个指标；颜色传递语义，其他数据用位置、字号和形状区分。</dd></div></dl><a href="references/dashboard.md">查看 Dashboard 专项 ↗</a></article>
+            <article class="scenario-card"><div class="scenario-number">04 / UTILITY</div><h3>工具优先</h3><p>用于后台管理、配置、权限、CRM、ERP 与专业工作台。</p><dl><div><dt>布局</dt><dd>信息密度优先；内容区常用 <code>--space-4</code>（16px），区块间距约 <code>--space-8</code>（32px）。</dd></div><div><dt>字体</dt><dd>标题和控件统一偏向无衬线，方便快速扫读。</dd></div><div><dt>色彩</dt><dd>用 <code>--color-border-default</code> 分区，弱化阴影；危险操作明确用 <code>--color-error</code>。</dd></div><div><dt>使用方法</dt><dd>保持操作位置稳定、表单反馈及时，默认关闭装饰性过渡。</dd></div></dl><a href="references/systems.md">查看系统规范 ↗</a></article>
+          </div>
+          <div class="subhead-row"><h3>同一 token，不同权重</h3><span>CONTEXTUAL TOKENS</span></div>
+          <div class="table-scroll"><table class="guide-table"><thead><tr><th>决策项</th><th>默认</th><th>数据密集</th><th>工具优先</th></tr></thead><tbody><tr><th>内容内距</th><td><code>--space-8</code> · 32px</td><td><code>--space-5</code> · 20px</td><td><code>--space-4</code> · 16px</td></tr><tr><th>区块间距</th><td><code>--space-16</code> · 64px</td><td><code>--space-10</code> · 40px</td><td><code>--space-8</code> · 32px</td></tr><tr><th>分隔边框</th><td><code>--color-border-subtle</code></td><td><code>--color-border-default</code></td><td><code>--color-border-default</code></td></tr><tr><th>卡片阴影</th><td>悬停时显示</td><td>常态可见</td><td>用边框代替</td></tr><tr><th>辅助文字</th><td><code>--text-sm</code></td><td><code>--text-xs</code></td><td><code>--text-xs</code></td></tr></tbody></table></div>
+        </section>
+
+        <section class="guide-section" id="special-scenes" aria-labelledby="special-title">
+          <div class="guide-section-head"><span>02 / APPLICATIONS</span><h2 id="special-title">专项场景，如何处理</h2><p><code>references/</code> 中的专题不只描述视觉，也覆盖复杂交互和产品状态。</p></div>
+          <div class="application-grid">
+            <article><span>01 / DASHBOARD</span><h3>数据看板</h3><p>顶部 KPI、主图表、次要信息列分层。图表系列沿用品牌色板；数字等宽排列，实时状态同时给出文字和形状。</p><a href="references/dashboard.md">查看指标、图表与表格细则 ↗</a></article>
+            <article><span>02 / CHAT</span><h3>对话界面</h3><p>消息流保持清楚的角色区分，输入区稳定可见。长对话注意滚动位置、加载态和错误反馈。</p><a href="references/components/chat.md">查看 Chat UI 组件 ↗</a></article>
+            <article><span>03 / FORM</span><h3>表单与多步骤流程</h3><p>输入时不过早报错；离开字段时检查，提交时全量检查并聚焦首个错误。步骤位置与内容宽度保持一致。</p><a href="references/systems.md">查看验证与流程规则 ↗</a></article>
+            <article><span>04 / CRITICAL</span><h3>危险与紧急状态</h3><p>清楚写出问题、严重程度、下一步。删除和覆盖用错误红色；报警界面让关键信息在第一眼可读。</p><a href="references/systems.md">查看紧急场景规则 ↗</a></article>
+            <article><span>05 / RESPONSIVE</span><h3>移动端与响应式</h3><p>按内容需要设断点。导航收起、表格滚动、弹窗变底部面板；触摸目标至少 44×44px。</p><a href="references/systems.md">查看响应式与滚动 ↗</a></article>
+            <article><span>06 / THEMES</span><h3>暗色模式</h3><p>替换背景、文字与边框 token，同时检查对比度、阴影和图表。先设置主题属性，再显示页面以减少闪烁。</p><a href="references/systems.md">查看主题切换方案 ↗</a></article>
+            <article><span>07 / IDENTITY</span><h3>Logo 与图标</h3><p>从网格与基础几何形出发，统一笔画和安全间距。根据浅色、深色、单色与小尺寸分别准备版本。</p><a href="references/logo.md">查看 Logo 绘制指南 ↗</a></article>
+            <article><span>08 / CONTENT</span><h3>中文内容与长文</h3><p>拉丁字体放在字体栈前，中文字体随后。正文至少 16px，中文正文行高建议 1.75，注意标点与换行。</p><a href="references/typography-cn.md">查看中文排版细则 ↗</a></article>
+          </div>
+          <div class="subhead-row"><h3>Dashboard 的九项落地规则</h3><span>REFERENCES / DASHBOARD</span></div>
+          <div class="table-scroll"><table class="guide-table"><thead><tr><th>专题</th><th>在哪里用</th><th>怎么做</th></tr></thead><tbody>
+            <tr><th>核心原则</th><td>所有数据页面</td><td>一屏重点突出最多 3 个指标；颜色传递语义，数字开启 <code>tabular-nums</code>。</td></tr>
+            <tr><th>布局骨架</th><td>总览看板</td><td>顶部 KPI 条 + 主趋势图 + 次要信息列；最多 4 张 KPI 卡。</td></tr>
+            <tr><th>数字与指标</th><td>KPI、对比值</td><td>关键值用展示字体，辅助值用等宽体；变化量配文字与箭头。</td></tr>
+            <tr><th>图表配色</th><td>折线、饼图、柱状图</td><td>按橙 / 灰蓝 / 橄榄绿 / 沙棕 / 灰排序；柱状图 Y 轴从 0 开始，单系列不逐柱换色。</td></tr>
+            <tr><th>表格</th><td>多列明细</td><td>数值列右对齐、等宽数字；行数多时分页或虚拟滚动。</td></tr>
+            <tr><th>实时状态</th><td>监控与自动刷新</td><td>标明“实时”和最后更新时间，仅更新变化的数字节点。</td></tr>
+            <tr><th>空与加载</th><td>首次加载、无数据</td><td>用 Skeleton 保持图表尺寸；无数据时解释原因和下一步。</td></tr>
+            <tr><th>信息层级</th><td>复杂报表</td><td>趋势图优先，比例与排名放次级；同屏最多 3 个图表。</td></tr>
+            <tr><th>反模式</th><td>审核阶段</td><td>避免彩虹图、误导坐标轴、无分页长表、无空状态。</td></tr>
+          </tbody></table></div>
+        </section>
+
+        <section class="guide-section" id="colors" aria-labelledby="colors-title">
+          <div class="guide-section-head"><span>03 / COLOR SYSTEM</span><h2 id="colors-title">每一种颜色，用在哪里</h2><p>下方完整列出 <code>assets/base.css</code> 的 21 个基础颜色。点击任一行的 token 可复制 <code>var(...)</code>。</p></div>
+          <div class="guide-callout compact"><strong>用色顺序</strong><p>先用背景色建立层级，再用文字与边框定义可读性；强调色只服务主要操作。状态色只表达成功、警告、错误或信息，不做装饰。</p></div>
+          <div class="guide-callout compact"><strong>对比度提醒</strong><p>仓库原始暖橙色 <code>#D97757</code> 配浅白文字约为 2.96:1，不足以承载常规字号按钮文案；按钮上宜使用深墨色 <code>--color-text-primary</code>。暖橙或深暖橙在浅底上作小字时，也应再测试对比度或改用更深的同色系文字色。</p></div>
+          <div id="color-groups"></div>
+          <div class="subhead-row"><h3>语义别名与透明色</h3><span>ALIASES</span></div>
+          <p>下面的别名也定义于 <code>base.css</code>。它们优先用于具体语义，方便未来换主题时集中修改。</p>
+          <div id="color-aliases" class="table-scroll"></div>
+          <div class="guide-callout compact"><strong>暗色模式</strong><p><code>base.css</code> 已为背景、文字和部分边框提供 <code>prefers-color-scheme: dark</code> 覆写；状态色和强调色沿用同一语义。实际项目应再检查正文、图表、禁用态与悬浮层的对比度。</p></div>
+        </section>
+
+        <section class="guide-section" id="typography" aria-labelledby="typography-title">
+          <div class="guide-section-head"><span>04 / TYPE SYSTEM</span><h2 id="typography-title">字体、字号与混排</h2><p>英文字体已在仓库中以 WOFF2 内置。中文推荐字形在参考文档中说明，需另行加载或使用系统回退。</p></div>
+          <div class="font-role-grid">
+            <article class="font-role"><span>DISPLAY</span><h3 style="font-family:var(--font-display)">Lora</h3><p>大标题、品牌叙事、重要引言。使用 <code>--font-display</code>；中文对应 <code>--font-display-cn</code>。</p><small>本地字体 · 常规 400 / 半粗 600 / 粗 700；常规斜体、半粗斜体</small></article>
+            <article class="font-role"><span>HEADING / UI</span><h3 style="font-family:var(--font-heading)">Poppins</h3><p>导航、按钮、标签、表单和需要快速扫描的界面标题。使用 <code>--font-heading</code> 或中文 <code>--font-heading-cn</code>。</p><small>本地字体 · 300 / 400 / 500 / 600 / 700；400、700 斜体</small></article>
+            <article class="font-role"><span>MONOSPACE</span><h3 style="font-family:var(--font-mono)">JetBrains Mono</h3><p>代码、token 名称、序号、辅助数值与技术标签。使用 <code>--font-mono</code>，避免用于长段正文。</p><small>本地字体 · 常规 400</small></article>
+          </div>
+          <div class="subhead-row"><h3>每一个字体 token 的职责</h3><span>FONT STACKS</span></div><div id="font-stacks" class="table-scroll"></div>
+          <div class="subhead-row"><h3>备选与中文字体</h3><span>FALLBACKS</span></div>
+          <div class="font-detail-grid">
+            <article><strong>DM Serif Display</strong><p>大标题的拉丁备选。Lora 不可用时接替 <code>--font-display</code>，笔画更鲜明。</p><small>本地 · 常规 / 斜体 400</small></article>
+            <article><strong>DM Serif Text</strong><p>拉丁正文备选。Lora 不可用时接替 <code>--font-body</code>。</p><small>本地 · 常规 / 斜体 400</small></article>
+            <article><strong>DM Sans</strong><p>无衬线拉丁备选。Poppins 不可用时接替 <code>--font-heading</code>。</p><small>本地 · 300 / 400 / 500 / 700</small></article>
+            <article><strong>霞鹜文楷 · LXGW WenKai</strong><p>中文大标题与长文首选，保留手写感。使用前需单独加载 WebFont 或本地子集。</p><small>参考方案 · 未随仓库内置</small></article>
+            <article><strong>思源黑体 · Noto / Source Han Sans SC</strong><p>中文 UI、按钮与标签首选；多字重，适合工具与数据场景。</p><small>参考方案 · 未随仓库内置</small></article>
+            <article><strong>系统回退</strong><p>中文衬线回退到宋体系列；中文 UI 回退到苹方、微软雅黑等。不同系统的字形会略有差异。</p><small>无需下载 · 即时可用</small></article>
+          </div>
+          <div class="subhead-row"><h3>中文字体的三种接入方式</h3><span>LOADING STRATEGY</span></div>
+          <div class="table-scroll"><table class="guide-table"><thead><tr><th>方式</th><th>适用情况</th><th>怎么用</th></tr></thead><tbody>
+            <tr><th>CDN WebFont</th><td>公开网站、希望中文视觉统一</td><td>在本地 <code>fonts.css</code> 与 <code>base.css</code> 之前加载霞鹜文楷和思源黑体样式；提供系统字体回退。</td></tr>
+            <tr><th>本地子集</th><td>离线、内网或重视加载速度</td><td>用字体子集工具扫描项目出现的汉字，生成 WOFF2 并以 <code>@font-face</code> 声明；内容变化时重新生成。</td></tr>
+            <tr><th>系统字体</th><td>零网络依赖的轻量页面</td><td>直接使用 <code>base.css</code> 的系统回退链；接受不同平台字形略有差别。</td></tr>
+          </tbody></table></div>
+          <div class="code-example"><div class="code-example-head"><span>CSS · 按文字角色选择字体</span><button type="button" class="copy-code" data-copy-target="font-code">复制代码</button></div><pre id="font-code"><code>.page-title { font-family: var(--font-display-cn); font-weight: 400; }
+.article-body { font-family: var(--font-body-cn); font-size: var(--text-cn-base); line-height: var(--leading-cn-normal); }
+.nav, .button { font-family: var(--font-heading-cn); }
+.metric { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }</code></pre></div>
+          <div class="subhead-row"><h3>完整字号表</h3><span>TYPE SCALE</span></div><div id="type-scale" class="table-scroll"></div>
+          <div class="subhead-row"><h3>行高与字重</h3><span>RHYTHM</span></div><div id="type-rhythm" class="table-scroll"></div>
+          <div class="guide-callout compact"><strong>中文排版细节</strong><p>正文建议至少 16px；大标题常用 400 字重。英文与中文在字体栈中按“拉丁在前、中文在后”排列；长文可用 <code>--leading-cn-loose</code>。检查全角标点的行首行尾位置，并为中英数字混排留出空间。</p></div>
+        </section>
+
+        <section class="guide-section" id="layout-tokens" aria-labelledby="layout-title">
+          <div class="guide-section-head"><span>05 / SPACING &amp; SHAPE</span><h2 id="layout-title">尺寸、留白与形状</h2><p>基础间距采用 4px 网格。优先用 token，不在组件里随意写新数值。</p></div>
+          <div class="subhead-row"><h3>全部间距 token</h3><span>SPACING SCALE</span></div><div id="space-scale" class="space-grid"></div>
+          <div class="subhead-row"><h3>圆角与宽度</h3><span>SHAPE & WIDTH</span></div><div id="shape-scale" class="table-scroll"></div>
+          <div class="subhead-row"><h3>阴影与动效</h3><span>DEPTH & MOTION</span></div><div id="motion-scale" class="table-scroll"></div>
+          <div class="guide-callout compact"><strong>布局落地方法</strong><p>阅读正文不超过 <code>--max-width-prose</code>（680px），常规文字区可到 860px，页面主容器以 1200px 为上限。默认场景相邻区块至少留 64px；需要更多信息时先切换模式，再调整密度。</p></div>
+        </section>
+
+        <section class="guide-section" id="components" aria-labelledby="components-title">
+          <div class="guide-section-head"><span>06 / COMPONENT LIBRARY</span><h2 id="components-title">组件，用途与入口</h2><p>按任务选取仓库已有实现。每项都列出适用位置和使用方式；点击分类名查看原始 HTML、CSS 与交互代码。</p></div>
+          <div class="component-filter"><label for="component-search">查找组件</label><input id="component-search" type="search" placeholder="搜索名称、用途或场景，如：弹窗、表格、反馈" /><span id="component-count" aria-live="polite"></span></div>
+          <div id="component-catalog"></div>
+          <p class="guide-fine">仓库文案称组件库为 43 个；当前 <code>references/components/</code> 中有 42 个具名组件章节。基础组件目录还列出 Footer，但正文缺少对应实现章节。本手册把这个缺口明确列出，避免误以为已有可复制代码。</p>
+        </section>
+
+        <section class="guide-section" id="systems" aria-labelledby="systems-title">
+          <div class="guide-section-head"><span>07 / SYSTEM RULES</span><h2 id="systems-title">十一项系统规范</h2><p>这些规则决定页面在真实产品里的稳定性。对应细节与代码均在 <code>references/systems.md</code>。</p></div>
+          <div id="system-list" class="system-list"></div>
+          <div class="guide-callout compact"><strong>注意源文件状态</strong><p><code>systems.md</code> 给出了 Z-index 与断点的推荐 token，但当前 <code>assets/base.css</code> 未定义这些变量；使用相关示例前，应将定义加入项目 token 层。不要直接假设它们已可用。</p></div>
+        </section>
+
+        <section class="guide-section" id="visual-language" aria-labelledby="visual-title">
+          <div class="guide-section-head"><span>08 / VISUAL LANGUAGE</span><h2 id="visual-title">视觉模式与 Logo</h2><p>在遵守基础 token 的前提下，用背景、排版、网格和几何建立独特气质。</p></div>
+          <div class="application-grid visual-grid">
+            <article><span>BACKGROUND</span><h3>背景与深度</h3><p>米色画布上可叠轻微径向晕染或噪点；深浅区块交替形成阅读节奏。同一项目选择 1–2 种背景技法。</p></article>
+            <article><span>COMPOSITION</span><h3>空间构图</h3><p>正文保持可读行宽；用不对称留白、超大标题或局部突破网格建立视觉重点。</p></article>
+            <article><span>MOTION</span><h3>动效与微交互</h3><p>进入动画可用自下而上淡入，错落延迟约 80ms；悬停位移保持轻微，尊重减少动画偏好。</p></article>
+            <article><span>ACCESSIBILITY</span><h3>可访问性</h3><p>正文目标对比度至少 4.5:1，大标题至少 3:1；焦点可见，移动端目标至少 44×44px。</p></article>
+            <article><span>LOGO SYSTEM</span><h3>Logo 几何</h3><p>从 8×8 或 12×12 网格、圆与基本多边形开始，统一笔画厚度；有机圆角和负空间应有明确作用。</p></article>
+            <article><span>LOGO VERSIONS</span><h3>Logo 变体</h3><p>准备彩色、深底反色、单色和仅图标版本；再检查最小尺寸、安全间距、Favicon 与 App Icon。</p></article>
+          </div>
+          <div class="subhead-row"><h3>Logo 专题覆盖</h3><span>REFERENCES / LOGO</span></div>
+          <div class="table-scroll"><table class="guide-table"><thead><tr><th>章节</th><th>在哪里用</th><th>怎么做</th></tr></thead><tbody>
+            <tr><th>构成原则</th><td>新标识设计</td><td>从 8×8 或 12×12 网格、简单几何形、统一笔画和有效负空间开始。</td></tr>
+            <tr><th>SVG 绘制</th><td>网页与应用标识</td><td>使用 <code>viewBox</code>、语义标题和 <code>currentColor</code>；小尺寸验证线条。</td></tr>
+            <tr><th>品牌配色</th><td>主标识与反色版</td><td>沿用深墨与暖橙，不另起高饱和色系。</td></tr>
+            <tr><th>版本变体</th><td>浅底、深底、印刷</td><td>准备彩色、反色、单色和仅图标四种版本。</td></tr>
+            <tr><th>最小尺寸</th><td>导航、名片、印刷</td><td>横版数字屏幕不小于 80px；图标不小于 24px；四周保护区约为图标高度的 50%。</td></tr>
+            <tr><th>衍生尺寸</th><td>Favicon、App Icon、OG 图</td><td>按尺寸简化细节，为遮罩图标留安全区域，并单独检查社交图构图。</td></tr>
+          </tbody></table></div>
+          <div class="guide-callout compact"><strong>常见反模式</strong><p>避免纯白底、蓝紫渐变、高饱和荧光、过多阴影与所有标题都用无衬线。危险操作不能用低对比灰色弱化风险。</p></div>
+          <div class="subhead-row"><h3>设计操作的七项检查</h3><span>REFERENCES / DESIGN RULES</span></div>
+          <div class="table-scroll"><table class="guide-table"><thead><tr><th>规则</th><th>在哪用</th><th>怎么做</th></tr></thead><tbody>
+            <tr><th>已有组件优先</th><td>开始编码前</td><td>先查组件索引，找到对应分类文件，再复用代码。</td></tr>
+            <tr><th>模式隔离</th><td>页面类型变化时</td><td>先选模式，再调整留白、对比与字体；避免默认模式习惯污染数据或后台页面。</td></tr>
+            <tr><th>生成后自检</th><td>交付前</td><td>检查 token、组件复用、危险操作颜色、信息层级和模式一致性。</td></tr>
+            <tr><th>局部修复</th><td>用户要求改动时</td><td>先定位问题范围，只改对应文字、组件或布局层。</td></tr>
+            <tr><th>风格冲突</th><td>视觉需求与规范冲突时</td><td>保留暖色与字体意图，用比例、背景和动效承载所需张力。</td></tr>
+            <tr><th>受控变化</th><td>品牌或内容页面</td><td>加入一个可解释的不标准构图元素；工具优先模式暂停此要求。</td></tr>
+            <tr><th>上下文 token</th><td>密度和任务变化时</td><td>按模式调整边框、间距、辅助文字与阴影权重。</td></tr>
+          </tbody></table></div>
+          <div class="source-inline"><a href="references/design-patterns.md">视觉模式原文 ↗</a><a href="references/logo.md">Logo 指南原文 ↗</a><a href="references/design-rules.md">设计操作规则原文 ↗</a></div>
+        </section>
+
+        <section class="guide-section sources-section" id="sources" aria-labelledby="sources-title">
+          <div class="guide-section-head"><span>09 / SOURCE FILES</span><h2 id="sources-title">回到原始规范</h2><p>手册用于快速理解与定位；以下文件保留了完整说明、代码与边界条件。</p></div>
+          <div class="source-list"><a href="SKILL.md"><strong>SKILL.md</strong><span>总规范、模式选择、设计原则</span><b>↗</b></a><a href="references/design-rules.md"><strong>design-rules.md</strong><span>模式隔离、自检与修复</span><b>↗</b></a><a href="references/design-patterns.md"><strong>design-patterns.md</strong><span>背景、动效、可访问性</span><b>↗</b></a><a href="references/typography-cn.md"><strong>typography-cn.md</strong><span>中文字体加载与排版</span><b>↗</b></a><a href="references/dashboard.md"><strong>dashboard.md</strong><span>数据看板专用规则</span><b>↗</b></a><a href="references/systems.md"><strong>systems.md</strong><span>响应式、主题、表单等系统规则</span><b>↗</b></a><a href="references/logo.md"><strong>logo.md</strong><span>Logo、Favicon、社交图</span><b>↗</b></a><a href="references/components/index.md"><strong>components/index.md</strong><span>全部组件分类入口</span><b>↗</b></a><a href="assets/base.css"><strong>assets/base.css</strong><span>实际 token 定义</span><b>↗</b></a></div>
+        </section>
+        <footer class="guide-footer"><span>Anthropic Style CN · 基于本仓库文档整理</span><a href="#overview">返回顶部 ↑</a></footer>
+      </main>
+    </div>
+    <div class="guide-toast" id="guide-toast" role="status" aria-live="polite"></div>
+  </body>
+</html>
