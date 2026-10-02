@@ -3,6 +3,7 @@
   'use strict';
 
   const CODE_ALIASES = { 'c++':'cpp', cxx:'cpp', cc:'cpp', py:'python', js:'javascript', html:'xml', htm:'xml', md:'markdown', ts:'typescript', sh:'bash', text:'plaintext', txt:'plaintext' };
+  const DATA_IMAGE = /^data:image\/(?:png|jpeg|gif|webp|avif|bmp|x-icon|svg\+xml);base64,[a-z0-9+/]+={0,2}$/i;
 
   function escapeHTML(text) {
     return text.replace(/[&<>"']/g, character => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[character]);
@@ -45,6 +46,11 @@
   }
 
   function prepareMathTokens(tokens) {
+    const inlineTokens = text => {
+      const lexer = new marked.Lexer();
+      lexer.tokens.links = tokens.links;
+      return lexer.inlineTokens(text);
+    };
     for (let index = 0; index < tokens.length; index++) {
       const token = tokens[index];
       if (token.type !== 'paragraph') continue;
@@ -54,8 +60,8 @@
       else if (bracket?.[1].trim()) tokens[index] = mathHTMLToken(token.raw, bracket[1], true);
     }
     marked.walkTokens(tokens, token => {
-      if (['paragraph','heading'].includes(token.type) && typeof token.text === 'string' && Array.isArray(token.tokens)) token.tokens = marked.Lexer.lexInline(token.text);
-      if (token.type === 'table') for (const cell of [...token.header, ...token.rows.flat()]) cell.tokens = marked.Lexer.lexInline(cell.text);
+      if (['paragraph','heading'].includes(token.type) && typeof token.text === 'string' && Array.isArray(token.tokens)) token.tokens = inlineTokens(token.text);
+      if (token.type === 'table') for (const cell of [...token.header, ...token.rows.flat()]) cell.tokens = inlineTokens(cell.text);
     });
     const convert = collection => collection.map(token => {
       if (token.type === 'inlineMathDollar' || token.type === 'inlineMathParen') return mathHTMLToken(token.raw, token.text, false);
@@ -90,6 +96,7 @@
     constructor(options = {}) {
       if (!global.marked || !global.DOMPurify || !global.hljs || !global.katex) throw new Error('Markdown 显示引擎缺少 marked、DOMPurify、highlight.js 或 KaTeX。');
       this.baseURL = options.baseURL || global.location?.href || 'http://localhost/';
+      this.images = options.images || new Map();
       this.pages = [];
       this.headings = [];
       installMathExtension();
@@ -97,6 +104,7 @@
 
     parse(markdown, options = {}) {
       const baseURL = options.baseURL || this.baseURL;
+      const images = options.images || this.images;
       const tokens = marked.lexer(markdown);
       prepareMathTokens(tokens);
       const groups = [[]];
@@ -151,8 +159,16 @@
           const value = node.getAttribute(attr);
           if (attr === 'href' && value.startsWith('#')) continue;
           try {
-            const url = new URL(value, baseURL);
-            if (!['https:','http:', ...(attr === 'href' ? ['mailto:','tel:'] : [])].includes(url.protocol)) node.removeAttribute(attr);
+            const url = new URL(attr === 'src' ? value.replace(/\\/g, '/') : value, baseURL);
+            let localImage = node.tagName === 'IMG' && images.get(url.href);
+            if (!localImage && node.tagName === 'IMG' && !/^(?:[a-z][a-z0-9+.-]*:|\/)/i.test(value)) {
+              const filename = url.pathname.split('/').pop();
+              const matches = [...images].filter(([key]) => new URL(key, baseURL).pathname.split('/').pop() === filename);
+              if (matches.length === 1) localImage = matches[0][1];
+            }
+            if (localImage && DATA_IMAGE.test(localImage)) node.setAttribute(attr, localImage);
+            else if (node.tagName === 'IMG' && DATA_IMAGE.test(value)) node.setAttribute(attr, value);
+            else if (!['https:','http:', ...(attr === 'href' ? ['mailto:','tel:'] : [])].includes(url.protocol)) node.removeAttribute(attr);
             else node.setAttribute(attr, url.href);
           } catch { node.removeAttribute(attr); }
           if (node.tagName === 'A') {
@@ -183,6 +199,7 @@
       });
 
       this.baseURL = baseURL;
+      this.images = images;
       this.pages = pages;
       this.headings = headings;
       return { pages, headings };

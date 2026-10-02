@@ -43,6 +43,14 @@
   <script defer src="vendor/highlight.min.js"></script>
   <script defer src="vendor/katex.min.js"></script>
   <script defer src="md-renderer.js"></script>
+  <script defer src="md-images.js"></script>
+  <script defer src="md-files.js"></script>
+  <script defer src="vendor/html2canvas.min.js"></script>
+  <script defer src="vendor/jspdf.umd.min.js"></script>
+  <script defer src="vendor/opentype.min.js"></script>
+  <script defer src="vendor/svg2pdf.umd.min.js"></script>
+  <script defer src="md-pdf.js"></script>
+  <script defer src="md-export.js"></script>
   <script defer src="app.js"></script>
 </head>
 <body>
@@ -54,9 +62,12 @@
         <button id="editMode" type="button" aria-pressed="true">编辑模式</button>
         <button id="viewMode" type="button" aria-pressed="false">查看模式</button>
       </nav>
-      <div class="actions"><button id="openFile">打开文件</button><button id="example">示例</button><button id="clear">清空</button><button id="copyHtml">复制 HTML</button><button id="share">复制阅读链接</button><button id="themeToggle" type="button" aria-pressed="false">深色</button></div>
+      <div class="actions"><button id="openFile">打开文件</button><button id="openFolder">打开文件夹</button><button id="openImages">导入图片</button><button id="saveFile" title="覆盖保存 · Ctrl+S">保存</button><button id="saveAs" title="另存为 · Ctrl+Shift+S">另存为</button><select id="exportFormat" aria-label="导出格式"><option value="pdf">PDF</option><option value="png">PNG</option><option value="jpeg">JPEG</option><option value="html">HTML</option></select><select id="pdfMode" aria-label="PDF 内容类型" title="指定 PDF 中的内容类型"><option value="text">文字 PDF · 可复制搜索</option><option value="vector">矢量 PDF · 文字转轮廓</option><option value="image">图片 PDF · 高清截图</option></select><button id="exportFile">导出全文</button><button id="example">示例</button><button id="clear">清空</button><button id="copyHtml">复制 HTML</button><button id="share">复制阅读链接</button><button id="themeToggle" type="button" aria-pressed="false">深色</button></div>
       <form id="sourceForm"><label for="source">文件地址</label><input id="source" placeholder="https://example.com/readme.md 或 ./foods.md" autocomplete="off"><button type="submit">载入</button><a href="README.md" id="help">阅读规范 ↗</a></form>
       <input type="file" id="file" accept=".md,.markdown,text/markdown,text/plain" hidden>
+      <input type="file" id="folder" webkitdirectory multiple hidden>
+      <input type="file" id="images" accept=".png,.jpg,.jpeg,.gif,.webp,.avif,.bmp,.ico,.svg" multiple hidden>
+      <select id="folderDocument" aria-label="选择文件夹中的 Markdown 文档" hidden></select>
     </header>
     <main class="layout">
       <section class="panel editor-panel" aria-label="Markdown 原文编辑器">
@@ -68,7 +79,7 @@
           <pre id="editorHighlight" aria-hidden="true"><code></code></pre>
           <textarea id="editor" spellcheck="false" aria-describedby="editorHint" placeholder="在左侧粘贴或输入 Markdown…"></textarea>
         </div>
-        <div class="editor-hint" id="editorHint">语法高亮 · 实时预览 · 支持 $…$ 与 $$…$$ 公式 · 可拖入 .md 文件</div>
+        <div class="editor-hint" id="editorHint">Ctrl+S 保存 · Ctrl+Shift+S 另存为 · 支持公式与图片 · 可拖入文档和图片</div>
       </section>
       <aside class="preview-column">
         <section class="panel document-panel" aria-label="文档预览">

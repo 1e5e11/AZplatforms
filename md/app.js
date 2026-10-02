@@ -58,6 +58,9 @@ $$
   let pure = document.documentElement.classList.contains('reader');
   let pages = [], headings = [], currentPage = 1, continuous = false, baseURL = location.href, renderEngine;
   let sourceURL = '', requestNumber = 0, controller, sourceText = '', revisionTimer;
+  let localImages = new Map();
+  let openedFileName = '';
+  let fileSession;
   const host = pure ? $('readerDocument') : $('document');
   if (pure) { $('workspace').remove(); $('readerRoot').hidden = false; }
 
@@ -73,7 +76,7 @@ $$
     const hasFragmentSource = fragment.has('md') || fragment.has('src');
     if (hasFragmentSource && (query.has('md') || query.has('src'))) throw new Error('正文来源不能同时出现在查询参数和片段中。');
     const params = hasFragmentSource ? fragment : query;
-    for (const key of ['md','src','page','anchor']) if (params.getAll(key).length > 1) throw new Error(`参数 ${key} 不能重复。`);
+    for (const key of ['md','src','images','base','page','anchor']) if (params.getAll(key).length > 1) throw new Error(`参数 ${key} 不能重复。`);
     if (params.has('md') && params.has('src')) throw new Error('md 与 src 只能传入一个。');
     return { params, inFragment: hasFragmentSource };
   }
@@ -89,7 +92,7 @@ $$
     return url;
   }
   function parseDocument(markdown) {
-    const result = renderEngine.parse(markdown, { baseURL });
+    const result = renderEngine.parse(markdown, { baseURL, images:localImages });
     pages = result.pages; headings = result.headings;
     document.title = headings[0]?.text || (pure ? 'Markdown' : '墨页 · Markdown 阅读与编辑');
   }
@@ -104,10 +107,17 @@ $$
     } else {
       // Modified clicks and "open link in new tab" must also open the current document.
       const params = new URLSearchParams(sourceURL ? { src: sourceURL } : { md: sourceText });
+      if (!sourceURL) addImageParameters(params);
       params.set('page', String(page)); if (anchor) params.set('anchor', anchor);
       url.search = ''; url.hash = params.toString();
     }
     return url.href;
+  }
+  function addImageParameters(params) {
+    if (baseURL !== location.href) params.set('base', baseURL);
+    const used = new Set(pages.flatMap(page => [...page.querySelectorAll('img')].map(image => image.getAttribute('src'))));
+    const entries = [...localImages].filter(([, data]) => used.has(data));
+    if (entries.length) params.set('images', JSON.stringify(entries));
   }
   function link(text, page, anchor = '') {
     const a = document.createElement('a'); a.textContent = text; a.href = navigationURL(page, anchor);
@@ -177,10 +187,10 @@ $$
       if (heading) { event.preventDefault(); navigate(heading.page, id); }
     }
   });
-  function render(text, page = 1, anchor = '') {
+  function render(text, page = 1, anchor = '', announce = true) {
     if (new TextEncoder().encode(text).length > MAX_BYTES) throw new Error('文档超过 2 MiB，请拆分后载入。');
     sourceText = text; parseDocument(text); showPage(page, anchor);
-    if (!pure) { $('charCount').textContent = `${text.length.toLocaleString()} 字`; status(`已排版 · ${pages.length} 页 · ${headings.length} 个标题`); }
+    if (!pure) { $('charCount').textContent = `${text.length.toLocaleString()} 字`; if (announce) status(`已排版 · ${pages.length} 页 · ${headings.length} 个标题`); }
   }
   async function fetchMarkdown(address) {
     const url = safeURL(address, location.href);
@@ -206,9 +216,10 @@ $$
     const request = ++requestNumber; status('正在载入…');
     try {
       const result = await fetchMarkdown(address); if (request !== requestNumber) return;
-      baseURL = result.url; sourceURL = result.url;
+      baseURL = result.url; sourceURL = result.url; localImages = new Map(); openedFileName = '';
+      if (!pure) $('folderDocument').hidden = true;
       if (pure) { const { params } = parameters(); render(result.text, pageOption(params), params.get('anchor') || (!location.hash.includes('=') ? decodeURIComponent(location.hash.slice(1)) : '')); }
-      else { setEditorValue(result.text); $('source').value = sourceURL; $('documentName').textContent = new URL(sourceURL).pathname.split('/').pop() || '远程文档'; render(result.text); }
+      else { setEditorValue(result.text); $('source').value = sourceURL; const name = decodeURIComponent(new URL(sourceURL).pathname.split('/').pop() || '远程文档.md'); fileSession.reset(result.text, /\.(md|markdown)$/i.test(name) ? name : `${name}.md`); render(result.text); }
     } catch (error) { if (request === requestNumber) { if (pure) fail(error.message); else status(error.message); } }
   }
   function stopLoad() { requestNumber++; controller?.abort(); sourceURL = ''; }
@@ -217,7 +228,7 @@ $$
     const sheet = [...document.styleSheets].find(candidate => candidate.href === href);
     try {
       const fontRoot = new URL('vendor/fonts/', location.href).href;
-      return [...sheet.cssRules].map(rule => rule.cssText).join('\n').replace(/url\(["']?fonts\//g, `url("${fontRoot}`);
+      return [...sheet.cssRules].map(rule => rule.cssText).join('\n').replace(/url\((["']?)(fonts\/[^)'"\s]+)\1\)/g, (_, quote, path) => `url("${new URL(path.slice('fonts/'.length), fontRoot).href}")`);
     } catch { return ''; }
   }
   async function copy(text, message) {
@@ -230,11 +241,16 @@ $$
       box.addEventListener('blur', () => box.remove(), { once:true }); return false;
     }
   }
-  if (!window.marked || !window.DOMPurify || !window.hljs || !window.katex || !window.MoyeMarkdownEngine) { fail('Markdown 显示引擎或依赖组件未加载，请检查相关文件是否完整后刷新。'); return; }
+  if (!window.marked || !window.DOMPurify || !window.hljs || !window.katex || !window.MoyeMarkdownEngine || !window.MoyeImages) { fail('Markdown 显示引擎或依赖组件未加载，请检查相关文件是否完整后刷新。'); return; }
   renderEngine = new MoyeMarkdownEngine({ baseURL });
   if (pure) {
     try {
       const { params } = parameters(); pageOption(params);
+      localImages = MoyeImages.decodeImages(params.get('images'));
+      if (params.has('md') && params.has('base')) {
+        const url = new URL(params.get('base'), location.href);
+        baseURL = location.protocol === 'file:' && url.protocol === 'file:' ? url.href : safeURL(url.href, location.href).href;
+      }
       if (params.has('md')) render(params.get('md'), pageOption(params), params.get('anchor') || '');
       else if (params.get('src')?.trim()) { host.textContent = '正在读取文档…'; loadAddress(params.get('src')); }
       else throw new Error('src 不能为空，请提供 Markdown 文件地址。');
@@ -250,6 +266,23 @@ $$
     if (fragment.has('md') || fragment.has('src')) location.reload();
   });
   const editor = $('editor'), editorHighlight = $('editorHighlight').querySelector('code'), workspace = $('workspace');
+  fileSession = new MoyeFiles.FileSession({
+    getText:() => editor.value,
+    onStatus:status,
+    onChange:session => {
+      $('documentName').textContent = `${session.name}${session.dirty ? ' · 未保存' : ''}`;
+      if (session.handle) openedFileName = session.name;
+      $('saveFile').disabled = session.busy; $('saveAs').disabled = session.busy;
+    }
+  });
+  $('saveFile').onclick = () => fileSession.save();
+  $('saveAs').onclick = () => fileSession.save(true);
+  window.addEventListener('beforeunload', event => { if (fileSession.dirty) { event.preventDefault(); event.returnValue = ''; } });
+  document.addEventListener('keydown', event => {
+    if (workspace.dataset.mode === 'edit' && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+      event.preventDefault(); if (!event.repeat) fileSession.save(event.shiftKey);
+    }
+  });
   const themeButtons = [$('themeToggle'), $('viewThemeToggle')];
   function setTheme(theme, persist = true) {
     const dark = theme === 'dark';
@@ -284,47 +317,168 @@ $$
     catch { editorHighlight.textContent = input; }
   }
   function setEditorValue(value) { editor.value = value; updateEditorHighlight(); }
-  setEditorValue(EXAMPLE); render(EXAMPLE);
+  setEditorValue(EXAMPLE); fileSession.reset(EXAMPLE, '阅读示例.md'); render(EXAMPLE);
   $('editMode').onclick = () => setMode('edit');
   $('viewMode').onclick = () => setMode('view');
   $('returnToEdit').onclick = () => setMode('edit');
   themeButtons.forEach(button => { button.onclick = toggleTheme; });
   $('viewOutline').addEventListener('click', event => { if (event.target.closest('a')) $('viewOutlinePanel').open = false; });
   editor.addEventListener('scroll', () => { $('editorHighlight').scrollTop = editor.scrollTop; $('editorHighlight').scrollLeft = editor.scrollLeft; });
-  editor.addEventListener('input', () => { updateEditorHighlight(); stopLoad(); clearTimeout(revisionTimer); revisionTimer = setTimeout(() => { try { render(editor.value, currentPage); } catch (error) { status(error.message); } }, 120); });
-  $('example').onclick = () => { stopLoad(); baseURL = location.href; setEditorValue(EXAMPLE); $('documentName').textContent = '阅读示例.md'; render(EXAMPLE); };
-  $('clear').onclick = () => { stopLoad(); baseURL = location.href; setEditorValue(''); $('source').value = ''; $('documentName').textContent = '未命名.md'; render(''); editor.focus(); };
+  editor.addEventListener('input', () => {
+    updateEditorHighlight(); fileSession.changed(); stopLoad(); clearTimeout(revisionTimer);
+    const previousStatus = $('status').textContent;
+    // A pending preview must not replace a newer save or export result message.
+    revisionTimer = setTimeout(() => { try { render(editor.value, currentPage, '', $('status').textContent === previousStatus); } catch (error) { status(error.message); } }, 120);
+  });
+  $('example').onclick = () => { stopLoad(); openedFileName = ''; $('folderDocument').hidden = true; localImages = new Map(); baseURL = location.href; setEditorValue(EXAMPLE); fileSession.reset(EXAMPLE, '阅读示例.md'); render(EXAMPLE); };
+  $('clear').onclick = () => { stopLoad(); openedFileName = ''; $('folderDocument').hidden = true; localImages = new Map(); baseURL = location.href; setEditorValue(''); $('source').value = ''; fileSession.reset(''); render(''); editor.focus(); };
   $('sourceForm').onsubmit = event => { event.preventDefault(); if ($('source').value.trim()) loadAddress($('source').value.trim()); else status('请先输入文件地址。'); };
-  async function openFile(file) {
+  async function openFile(file, files = [file], handle = null) {
     if (!file) return; stopLoad(); const request = requestNumber;
     if (!/\.(md|markdown)$/i.test(file.name)) { status('请选择 .md 或 .markdown 文件。'); return; }
     if (file.size > MAX_BYTES) { status('文档超过 2 MiB，请拆分后载入。'); return; }
     try {
       const text = new TextDecoder('utf-8', { fatal:true }).decode(await file.arrayBuffer()); if (request !== requestNumber) return;
-      baseURL = location.href; setEditorValue(text); $('documentName').textContent = file.name; $('source').value = ''; render(text);
-    } catch { status('文件读取失败，请确认文件采用 UTF-8 编码。'); }
+      const images = await MoyeImages.readImages(files, location.href); if (request !== requestNumber) return;
+      localImages = images; baseURL = MoyeImages.fileURL(file.webkitRelativePath || file.name, location.href);
+      openedFileName = file.name;
+      setEditorValue(text); fileSession.reset(text, file.name, handle); $('source').value = ''; render(text);
+    } catch (error) { if (request === requestNumber) status(error instanceof TypeError ? '文件读取失败，请确认文件采用 UTF-8 编码。' : error.message); }
   }
-  $('openFile').onclick = () => $('file').click(); $('file').onchange = () => { openFile($('file').files[0]); $('file').value = ''; };
+  $('openFile').onclick = async () => {
+    if (typeof window.showOpenFilePicker !== 'function') { $('file').click(); return; }
+    try {
+      const [handle] = await window.showOpenFilePicker({ types:MoyeFiles.types, multiple:false });
+      const file = await handle.getFile(); $('folderDocument').hidden = true; await openFile(file, [file], handle);
+    } catch (error) {
+      if (error.name === 'AbortError') return;
+      if (error.name === 'SecurityError') { $('file').click(); return; }
+      status(`打开文件失败：${error.message}`);
+    }
+  };
+  $('file').onchange = () => { if ($('file').files.length) { $('folderDocument').hidden = true; openFile($('file').files[0]); } $('file').value = ''; };
+  async function importImages(files, documentBase = baseURL, assetBase = baseURL) {
+    const request = ++requestNumber; controller?.abort();
+    try {
+      const images = await MoyeImages.readImages(files, assetBase, localImages);
+      if (request !== requestNumber) return;
+      stopLoad(); localImages = images; baseURL = documentBase; render(editor.value, currentPage);
+      status(`已导入 ${files.filter(MoyeImages.imageType).length} 张图片 · 使用 ![说明](图片文件名) 引用`);
+    } catch (error) { if (request === requestNumber) status(error.message); }
+  }
+  function openFiles(files, handles = new Map()) {
+    const documents = files.filter(file => /\.(md|markdown)$/i.test(file.name));
+    if (documents.length > 1) {
+      const select = $('folderDocument'); select.replaceChildren(new Option('选择 Markdown 文档…', ''));
+      documents.forEach((file, index) => select.append(new Option(file.webkitRelativePath || file.name, String(index))));
+      select.hidden = false;
+      select.onchange = () => { if (select.value !== '') { const file = documents[Number(select.value)]; openFile(file, files, handles.get(file)); } };
+      status('请选择要打开的 Markdown 文档，配图会一起载入。'); return;
+    }
+    $('folderDocument').hidden = true;
+    if (documents.length) return openFile(documents[0], files, handles.get(documents[0]));
+    if (files.some(MoyeImages.imageType)) return importImages(files);
+    status('请选择 Markdown 文件或 PNG、JPEG、GIF、WebP、AVIF、BMP、ICO、SVG 图片。');
+  }
+  async function readDirectory(directory, prefix = directory.name, files = [], handles = new Map()) {
+    for await (const child of directory.values()) {
+      if (child.kind === 'directory') await readDirectory(child, `${prefix}/${child.name}`, files, handles);
+      else {
+        if (!/\.(md|markdown|png|jpe?g|gif|webp|avif|bmp|ico|svg)$/i.test(child.name)) continue;
+        if (files.length >= 1000) throw new Error('文件夹中可用文件超过 1,000 个，请选择较小的文件夹。');
+        const file = await child.getFile();
+        Object.defineProperty(file, 'webkitRelativePath', { value:`${prefix}/${child.name}` });
+        files.push(file); handles.set(file, child);
+      }
+    }
+    return { files, handles };
+  }
+  function openFolderFiles(files, handles = new Map()) {
+    // When a document is already open, its matching file determines the base directory.
+    const matches = files.filter(file => file.name === openedFileName);
+    if (matches.length === 1) {
+      if (!fileSession.handle && handles.has(matches[0])) fileSession.handle = handles.get(matches[0]);
+      importImages(files, MoyeImages.fileURL(matches[0].webkitRelativePath || matches[0].name, location.href), location.href);
+    } else if (files.length) openFiles(files, handles);
+  }
+  $('openFolder').onclick = async () => {
+    if (typeof window.showDirectoryPicker !== 'function') { $('folder').click(); return; }
+    try {
+      const directory = await window.showDirectoryPicker();
+      const { files, handles } = await readDirectory(directory); openFolderFiles(files, handles);
+    } catch (error) {
+      if (error.name === 'AbortError') return;
+      if (error.name === 'SecurityError') { $('folder').click(); return; }
+      status(`打开文件夹失败：${error.message}`);
+    }
+  };
+  $('folder').onchange = () => {
+    const files = [...$('folder').files]; $('folder').value = ''; openFolderFiles(files);
+  };
+  $('openImages').onclick = () => $('images').click();
+  $('images').onchange = () => { const files = [...$('images').files]; $('images').value = ''; if (files.length) importImages(files); };
   $('copySource').onclick = () => copy(editor.value, 'Markdown 原文已复制');
   document.addEventListener('dragover', event => { if (event.dataTransfer.types.includes('Files')) event.preventDefault(); });
-  document.addEventListener('drop', event => { if (event.dataTransfer.files.length) { event.preventDefault(); openFile(event.dataTransfer.files[0]); } });
+  document.addEventListener('drop', async event => {
+    if (!event.dataTransfer.files.length && ![...event.dataTransfer.items].some(item => item.kind === 'file')) return;
+    event.preventDefault();
+    const fallback = [...event.dataTransfer.files];
+    // Obtain handle promises during the drop event, before its data store is protected.
+    const pending = [...event.dataTransfer.items].filter(item => item.kind === 'file').map(item => item.getAsFileSystemHandle?.());
+    try {
+      const entries = await Promise.all(pending);
+      if (!entries.length || entries.some(handle => !handle)) { openFiles(fallback); return; }
+      const files = [], handles = new Map();
+      for (const handle of entries) {
+        if (handle.kind === 'directory') await readDirectory(handle, handle.name, files, handles);
+        else { const file = await handle.getFile(); files.push(file); handles.set(file, handle); }
+      }
+      openFiles(files, handles);
+    } catch (error) { status(`拖入文件失败：${error.message}`); }
+  });
   $('share').onclick = () => {
+    try { render(editor.value, currentPage); } catch (error) { status(error.message); return; }
     const url = new URL(location.href); url.search = ''; url.hash = '';
     const params = new URLSearchParams();
     if (sourceURL && sourceText === $('editor').value) params.set('src', sourceURL);
-    else params.set('md', $('editor').value);
+    else { params.set('md', $('editor').value); addImageParameters(params); }
     params.set('page', String(currentPage)); url.hash = params.toString();
-    if (url.href.length > 64000) { status('正文链接超过 64,000 字符。请将文件托管后使用 src 分享。'); return; }
+    if (url.href.length > 64000) { status('正文或图片使链接超过 64,000 字符。请复制 HTML，或将 Markdown 和图片托管后使用 src 分享。'); return; }
     copy(url.href, '阅读链接已复制 · 打开后仅显示文档');
   };
-  $('copyHtml').onclick = () => {
-    try { render($('editor').value, currentPage); } catch (error) { status(error.message); return; }
+  function buildExportHost() {
+    render(editor.value, currentPage);
     const exportHost = document.createElement('article'); exportHost.className = 'markdown';
-    for (let i = 0; i < pages.length; i++) { const page = pages[i].cloneNode(true); for (const slot of page.querySelectorAll('[data-directive]')) { if (slot.dataset.directive === 'toc') { const toc = makeTOC(); for (const a of toc.querySelectorAll('a')) { a.href = `#${encodeURIComponent(a.dataset.anchor)}`; a.removeAttribute('data-page'); a.removeAttribute('data-anchor'); } slot.replaceWith(toc); } else slot.remove(); } for (const heading of page.querySelectorAll('[id]')) heading.id = heading.id.slice('md-heading-'.length); exportHost.append(page); }
+    for (let i = 0; i < pages.length; i++) { const page = pages[i].cloneNode(true); for (const slot of page.querySelectorAll('[data-directive]')) { if (slot.dataset.directive === 'toc') { const toc = makeTOC(); for (const a of toc.querySelectorAll('a')) { a.href = `#${encodeURIComponent(a.dataset.anchor)}`; a.removeAttribute('data-page'); a.removeAttribute('data-anchor'); } slot.replaceWith(toc); } else slot.remove(); } for (const heading of page.querySelectorAll('[id^="md-heading-"]')) heading.id = heading.id.slice('md-heading-'.length); exportHost.append(page); }
     for (const bar of exportHost.querySelectorAll('.code-bar')) bar.remove();
+    return exportHost;
+  }
+  $('copyHtml').onclick = () => {
+    let exportHost;
+    try { exportHost = buildExportHost(); } catch (error) { status(error.message); return; }
     const syntaxCSS = document.getElementById('codeTheme').textContent;
     const mathCSS = exportKaTeXStyles();
     copy(`<style>del{color:#7c0a21;text-decoration-thickness:2px}.document-page+.document-page{break-before:page}img{max-width:100%}pre{overflow:auto;white-space:pre}code{font-family:Consolas,monospace}.math-display{overflow-x:auto;text-align:center}${syntaxCSS}${mathCSS}</style>\n${exportHost.outerHTML}`, '全文 HTML 已复制');
+  };
+  $('exportFormat').addEventListener('change', () => { $('pdfMode').hidden = $('exportFormat').value !== 'pdf'; });
+  $('exportFile').onclick = async () => {
+    const button = $('exportFile'), format = $('exportFormat').value, pdfMode = $('pdfMode').value;
+    const label = format === 'pdf' ? `${{image:'图片', vector:'矢量', text:'文字'}[pdfMode]} PDF` : format.toUpperCase();
+    if (button.disabled) return;
+    button.disabled = true; $('exportFormat').disabled = true; $('pdfMode').disabled = true;
+    try {
+      clearTimeout(revisionTimer);
+      const exportHost = buildExportHost(), syntax = $('codeTheme').textContent;
+      const name = fileSession.name.replace(/\.(md|markdown)$/i, '') || '未命名';
+      status(`正在导出 ${label} 全文…`);
+      let blob;
+      if (format === 'html') blob = await MoyeExport.html(exportHost, syntax, exportKaTeXStyles(), name);
+      else if (format === 'pdf') blob = await MoyeExport.pdf(exportHost, syntax, name, status, pdfMode);
+      else blob = await MoyeExport.image(exportHost, syntax, format);
+      MoyeFiles.download(blob, `${name}.${format === 'jpeg' ? 'jpg' : format}`);
+      status(`已导出 ${label} 全文 · ${name}`);
+    } catch (error) { status(`导出失败：${error.message}`); }
+    finally { button.disabled = false; $('exportFormat').disabled = false; $('pdfMode').disabled = false; }
   };
   $('help').onclick = event => { event.preventDefault(); loadAddress('./README.md'); };
   $('editor').addEventListener('keydown', event => { if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); $('copyHtml').click(); } });

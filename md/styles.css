@@ -4,11 +4,11 @@
 body{margin:0;background:var(--az-page);color:var(--az-text);font:16px 'Times New Roman','宋体',serif,'Liberation Mono'}
 [hidden]{display:none!important}
 a{color:var(--az-accent);text-underline-offset:4px}
-button,input{height:24px;padding:1px 8px;background:var(--az-surface);color:var(--az-text);border:0;border-bottom:2px solid transparent;border-radius:.15em;font:normal 13px 'Times New Roman','宋体',serif;box-shadow:0 .7565932872px 5px var(--az-accent-alpha);backdrop-filter:blur(15px);transition:.2s}
+button,input,select{height:24px;padding:1px 8px;background:var(--az-surface);color:var(--az-text);border:0;border-bottom:2px solid transparent;border-radius:.15em;font:normal 13px 'Times New Roman','宋体',serif;box-shadow:0 .7565932872px 5px var(--az-accent-alpha);backdrop-filter:blur(15px);transition:.2s}
 input{font-style:italic;text-indent:3px;min-width:0}
 input::placeholder,textarea::placeholder{color:var(--az-placeholder)}
-button:hover,input:hover{box-shadow:0 0 10px var(--az-accent-alpha)}
-button:focus-visible,input:focus{outline:none;border-bottom-color:var(--az-accent-alpha)}
+button:hover,input:hover,select:hover{box-shadow:0 0 10px var(--az-accent-alpha)}
+button:focus-visible,input:focus,select:focus{outline:none;border-bottom-color:var(--az-accent-alpha)}
 a:focus-visible,textarea:focus-visible{outline:1px solid var(--az-accent);outline-offset:3px}
 button:disabled{opacity:.4}
 .workspace{height:100dvh;min-height:560px;padding:10px 20px 0;display:flex;flex-direction:column;gap:12px}
