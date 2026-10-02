@@ -1,6 +1,6 @@
 # 模型 API 使用文档
 
-这是啊这AI I（啊这一号）的api文档。有关于模型的技术细节，请阅读[技术文档](https://ssssssss.eu.org/ai/docs/AZ%20I/tech.md)。
+这是啊这AI I（啊这一号）的api文档。有关于模型的技术细节，请阅读[技术文档](https://ssssssss.eu.org/md/#src=https%3A%2F%2Fssssssss.eu.org%2Fai%2Fdocs%2FAZ%2520I%2Ftech.md&page=1)。
 
 本服务兼容 OpenAI Chat Completions 的文本聊天格式，支持普通 JSON 返回、SSE 流式输出、指定种子和并发排队。
 
