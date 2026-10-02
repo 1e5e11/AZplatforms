@@ -180,5 +180,3 @@ OpenAI 接口使用如下错误结构：
 网页继续使用 `POST /api/generate`，支持 `prompt` 或 `messages`；流式为 NDJSON，`token.text` 是累计文本，应替换回答区域。外部 OpenAI 客户端使用 `/v1/chat/completions`，其 `delta.content` 应追加。两个接口使用相同的模型、思考策略、生成上限和日志。
 
 原有 `/api/jobs` 仍提供异步任务提交与查询。旧日志中的 `mode: "chat"` 表示采用聊天提示格式；`reasoning_mode: "off"` 表示关闭思考展示，更新后的简洁日志已省略这两个字段。
-
-参考：[OpenAI Chat Completions](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create)、[OpenAI 流式响应](https://developers.openai.com/api/reference/resources/chat/subresources/completions/streaming-events).
