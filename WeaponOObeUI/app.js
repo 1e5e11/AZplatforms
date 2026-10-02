@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const BUILD = '2026-09-28-static-cache-1';
+  const BUILD = '2026-10-02-model-refresh-1';
   const OPENCODE_ENDPOINT = 'https://opencode.ai/zen/v1/chat/completions';
   const OPENCODE_MODELS_ENDPOINT = 'https://opencode.ai/zen/v1/models';
   const PROVIDER_PRESETS = {
@@ -50,7 +50,8 @@
     language: 'zh',
     transport: 'auto',
     proxyUrl: DEFAULT_PROXY_URL,
-    openCodeModels: OPENCODE_FREE_PRESETS
+    openCodeModels: OPENCODE_FREE_PRESETS,
+    providerModels: {}
   };
 
   const I18N = {
@@ -87,9 +88,11 @@
       failedFetch: 'API 连接失败。公网 HTTPS 页面调用 OpenCode 时需要同源 /api/proxy；纯前端无法绕过第三方服务器的 CORS。若在本机使用，请运行 az_llm_server.py。',
       directFailedProxyOk: '浏览器直连不可用，已自动通过代理连接',
       proxyUnavailable: '代理不可用。公网部署请配置同源 /api/proxy；本机请运行 az_llm_server.py',
-      testing: '正在测试 API…', refreshStart: '正在刷新 OpenCode 模型…',
-      refreshDone: 'OpenCode 免费模型已刷新并缓存到本地',
-      refreshFallback: '模型刷新失败 · 继续使用内置免费模型',
+      testing: '正在测试 API…', refreshingModels: '刷新中…', refreshStart: '正在刷新 {provider} 模型…',
+      refreshDone: '{provider} 模型已刷新（{count} 个）',
+      refreshFallback: '模型刷新失败 · 保留已有模型选项',
+      invalidModels: '接口未返回有效模型列表',
+      invalidModelsEndpoint: '请填写有效的 HTTP(S) Chat Completions 接口地址',
       imported: '已导入 {count} 个聊天', importFailed: '导入失败',
       fileTooLarge: '文件过大：{name}（单个文件上限 8 MB）',
       tooManyFiles: '一次最多附加 10 个文件',
@@ -139,9 +142,11 @@
       failedFetch: 'API connection failed. Public HTTPS pages need a same-origin /api/proxy for OpenCode; frontend JavaScript cannot bypass a third-party server’s CORS policy. For local use, run az_llm_server.py.',
       directFailedProxyOk: 'Browser-direct request was unavailable; connected through the proxy',
       proxyUnavailable: 'Proxy unavailable. Configure same-origin /api/proxy for public deployment, or run az_llm_server.py locally',
-      testing: 'Testing API…', refreshStart: 'Refreshing OpenCode model list…',
-      refreshDone: 'OpenCode free models refreshed and cached locally',
-      refreshFallback: 'Model refresh failed · using built-in free-model presets',
+      testing: 'Testing API…', refreshingModels: 'Refreshing…', refreshStart: 'Refreshing {provider} models…',
+      refreshDone: '{provider} models refreshed ({count})',
+      refreshFallback: 'Model refresh failed · keeping existing model options',
+      invalidModels: 'The endpoint did not return a valid model list',
+      invalidModelsEndpoint: 'Enter a valid HTTP(S) Chat Completions endpoint',
       imported: 'Imported {count} chat(s)', importFailed: 'Import failed',
       fileTooLarge: 'File too large: {name} (8 MB limit per file)',
       tooManyFiles: 'Up to 10 attachments per message',
@@ -178,6 +183,7 @@
   let sessionApiKey = '';
   let pendingAttachments = [];
   let dragDepth = 0;
+  const modelRefreshRequests = { active: null, modal: null };
 
   const $ = id => document.getElementById(id);
   const app = $('app');
@@ -216,7 +222,6 @@
   function applyLanguage() {
     document.documentElement.lang = settings.language === 'zh' ? 'zh-CN' : 'en';
     $('languageQuick').value = settings.language;
-    $('refreshModelsBtn').hidden = settings.provider !== 'opencode';
     $('languageSetting').value = settings.language;
 
     setText('providerQuickLabel', 'provider');
@@ -230,7 +235,8 @@
     setText('menuNewChatBtn', 'newChat');
     setText('quickAdvancedTitle', 'quickAdvanced');
     setText('moreBtn', 'more');
-    setText('refreshModelsBtn', 'refreshModels');
+    updateModelRefreshButton(false);
+    updateModelRefreshButton(true);
     setText('renameBtn', 'rename');
     setText('exportOneBtn', 'exportChat');
     setText('exportAllBtn', 'exportAll');
@@ -389,6 +395,9 @@
     settings.openCodeModels = Array.isArray(settings.openCodeModels) && settings.openCodeModels.length
       ? settings.openCodeModels
       : OPENCODE_FREE_PRESETS;
+    if (!settings.providerModels || typeof settings.providerModels !== 'object' || Array.isArray(settings.providerModels)) {
+      settings.providerModels = {};
+    }
     if (!['zh','en'].includes(settings.language)) settings.language = 'zh';
     if (!['auto','direct','proxy'].includes(settings.transport)) settings.transport = 'auto';
     if (!['system','light','dark'].includes(settings.theme)) settings.theme = 'system';
@@ -487,27 +496,44 @@
     if ($('themeBtn')) $('themeBtn').textContent = isDarkTheme() ? t('light') : t('dark');
   }
 
-  function buildModelOptions(select, selected, provider = settings.provider, modelList = settings.openCodeModels) {
-    const models = provider === 'opencode' ? modelList : [];
+  function modelsEndpoint(cfg) {
+    const endpoint = (cfg.apiBase || '').trim() || PROVIDER_PRESETS[cfg.provider]?.endpoint || '';
+    if (!endpoint) throw new Error(t('missingEndpoint'));
+    let url;
+    try { url = new URL(endpoint); }
+    catch { throw new Error(t('invalidModelsEndpoint')); }
+    if (!['http:', 'https:'].includes(url.protocol) || !/\/chat\/completions\/?$/.test(url.pathname)) {
+      throw new Error(t('invalidModelsEndpoint'));
+    }
+    url.pathname = url.pathname.replace(/\/chat\/completions\/?$/, '/models');
+    url.hash = '';
+    return url.href;
+  }
+  function modelCacheKey(cfg) {
+    try { return JSON.stringify([cfg.provider, modelsEndpoint(cfg)]); }
+    catch { return ''; }
+  }
+  function cachedModels(cfg) {
+    const cached = settings.providerModels[modelCacheKey(cfg)];
+    if (Array.isArray(cached) && cached.length) return cached;
+    if (cfg.provider === 'opencode' && modelCacheKey(cfg) === modelCacheKey(DEFAULT_SETTINGS)) return settings.openCodeModels;
+    const preset = PROVIDER_PRESETS[cfg.provider];
+    return preset?.model ? [{ id: preset.model, name: preset.model }] : [];
+  }
+  function buildModelOptions(select, selected, modelList = cachedModels(settings)) {
+    const models = modelList;
     select.innerHTML = '';
-    if (provider === 'custom') {
+    models.forEach(m => {
       const o = document.createElement('option');
-      o.value = selected || settings.model || '';
-      o.textContent = selected || settings.model || 'custom-model';
+      o.value = m.id;
+      o.textContent = m.name || m.id;
       select.appendChild(o);
-    } else {
-      models.forEach(m => {
-        const o = document.createElement('option');
-        o.value = m.id;
-        o.textContent = m.name || m.id;
-        select.appendChild(o);
-      });
-      if (selected && !models.some(m => m.id === selected)) {
-        const o = document.createElement('option');
-        o.value = selected;
-        o.textContent = selected;
-        select.appendChild(o);
-      }
+    });
+    if (selected && !models.some(m => m.id === selected)) {
+      const o = document.createElement('option');
+      o.value = selected;
+      o.textContent = selected;
+      select.appendChild(o);
     }
     select.value = selected || models[0]?.id || '';
   }
@@ -1346,7 +1372,12 @@
     $('settingsModal').classList.add('open');
     setTimeout(() => $('apiKeySetting').focus(), 0);
   }
-  function closeSettings() { $('settingsModal').classList.remove('open'); }
+  function closeSettings() {
+    $('settingsModal').classList.remove('open');
+    modelRefreshRequests.modal?.abort();
+    modelRefreshRequests.modal = null;
+    updateModelRefreshButton(true);
+  }
 
   async function saveSettingsFromModal() {
     const candidate = collectSettingsFromModal();
@@ -1356,6 +1387,8 @@
       return;
     }
     const oldModel = currentModel();
+    const connectionChanged = modelRefreshSignature(settings, currentApiKey()) !==
+      modelRefreshSignature(candidate, $('apiKeySetting').value.trim());
     settings = candidate;
     sessionApiKey = $('apiKeySetting').value.trim();
     settings.apiKey = settings.rememberKey ? sessionApiKey : '';
@@ -1366,6 +1399,7 @@
     if (oldModel !== nextModel && activeConversation?.messages?.length) toast(t('modelSwitchToast'), 2600);
     renderAll();
     toast(t('settingsSaved'));
+    if (connectionChanged) void refreshModels();
   }
 
   async function testApi() {
@@ -1421,9 +1455,10 @@
   }
   function normalizeModelList(payload) {
     const arr = Array.isArray(payload) ? payload : (payload?.data || payload?.models || []);
+    if (!Array.isArray(arr)) throw new Error(t('invalidModels'));
     return arr.map(m => ({
-      id:String(m?.id || m?.model || '').trim(),
-      name:String(m?.name || m?.display_name || m?.id || m?.model || '').trim(),
+      id:String(typeof m === 'string' ? m : m?.id || m?.model || '').trim(),
+      name:String(typeof m === 'string' ? m : m?.name || m?.display_name || m?.id || m?.model || '').trim(),
       raw:m
     })).filter(m => m.id);
   }
@@ -1432,37 +1467,88 @@
     const raw = JSON.stringify(m.raw || m).toLowerCase();
     return raw.includes('chat/completions') || raw.includes('openai-compatible');
   }
-  async function refreshOpenCodeModels() {
-    if (settings.provider !== 'opencode') return toast(settings.language === 'zh' ? '请先切换到 OpenCode Zen' : 'Switch to OpenCode Zen first');
-    $('refreshModelsBtn').disabled = true;
-    setBottomStatus(t('refreshStart'));
+  function modelRefreshSignature(cfg, key) {
+    return JSON.stringify([cfg.provider, cfg.apiBase, cfg.transport, cfg.proxyUrl, key]);
+  }
+  function updateModelRefreshButton(fromModal) {
+    const button = $(fromModal ? 'refreshModelsSettingBtn' : 'refreshModelsBtn');
+    const busy = !!modelRefreshRequests[fromModal ? 'modal' : 'active'];
+    button.disabled = busy;
+    button.textContent = t(busy ? 'refreshingModels' : 'refreshModels');
+    button.setAttribute('aria-busy', String(busy));
+  }
+  async function refreshModels({ fromModal = false } = {}) {
+    const context = fromModal ? 'modal' : 'active';
+    modelRefreshRequests[context]?.abort();
+    const controller = new AbortController();
+    modelRefreshRequests[context] = controller;
+    const cfg = fromModal ? collectSettingsFromModal() : { ...settings };
+    const key = fromModal ? $('apiKeySetting').value.trim() : currentApiKey();
+    const signature = modelRefreshSignature(cfg, key);
+    // Only the latest request for an unchanged connection may update its controls.
+    const isCurrent = () => {
+      if (controller.signal.aborted || modelRefreshRequests[context] !== controller) return false;
+      if (fromModal && !$('settingsModal').classList.contains('open')) return false;
+      const currentCfg = fromModal ? collectSettingsFromModal() : settings;
+      const currentKey = fromModal ? $('apiKeySetting').value.trim() : currentApiKey();
+      return signature === modelRefreshSignature(currentCfg, currentKey);
+    };
+    const providerName = PROVIDER_PRESETS[cfg.provider]?.name || t('providerCustom');
+    updateModelRefreshButton(fromModal);
+    setBottomStatus(t('refreshStart', { provider: providerName }));
     try {
-      const response = await networkFetch(OPENCODE_MODELS_ENDPOINT, {
-        headers:currentApiKey() ? { Authorization:`Bearer ${currentApiKey()}` } : {}
-      });
+      const endpoint = modelsEndpoint(cfg);
+      const response = await networkFetch(endpoint, {
+        method: 'GET',
+        cache: 'no-store',
+        signal: controller.signal,
+        headers: key ? { Authorization: `Bearer ${key}` } : {}
+      }, cfg);
       if (!response.ok) throw await apiError(response);
       const contentType = response.headers.get('content-type') || '';
       if (!contentType.toLowerCase().includes('json')) {
         throw new Error(settings.language === 'zh'
-          ? '同源 /api/proxy 未部署或返回的不是 JSON'
-          : 'Same-origin /api/proxy is missing or did not return JSON');
+          ? '模型接口返回的不是 JSON，请检查接口或代理地址'
+          : 'Model endpoint did not return JSON; check the endpoint or proxy URL');
       }
       const data = await response.json();
       const all = normalizeModelList(data);
-      const free = all.filter(m => looksFreeModel(m.raw) && looksChatCompletionsModel(m));
-      const merged = new Map(OPENCODE_FREE_PRESETS.map(m => [m.id, m]));
-      for (const m of free) merged.set(m.id, { id:m.id, name:`${m.name || m.id}${/free/i.test(m.name) ? '' : ' · Free'}` });
-      settings.openCodeModels = [...merged.values()].sort((a,b) => a.name.localeCompare(b.name));
-      if (!settings.openCodeModels.some(m => m.id === settings.model)) settings.model = settings.openCodeModels[0].id;
+      if (!all.length) throw new Error(t('invalidModels'));
+      const merged = new Map();
+      if (cfg.provider === 'opencode') {
+        OPENCODE_FREE_PRESETS.forEach(m => merged.set(m.id, m));
+        const free = all.filter(m => looksFreeModel(m.raw) && looksChatCompletionsModel(m));
+        for (const m of free) merged.set(m.id, { id: m.id, name: `${m.name || m.id}${/free/i.test(m.name) ? '' : ' · Free'}` });
+      } else {
+        for (const m of all) merged.set(m.id, { id: m.id, name: m.name || m.id });
+      }
+      const models = [...merged.values()].sort((a,b) => a.name.localeCompare(b.name));
+      if (!isCurrent()) return;
+      settings.providerModels[modelCacheKey(cfg)] = models;
+      if (cfg.provider === 'opencode' && endpoint === OPENCODE_MODELS_ENDPOINT) settings.openCodeModels = models;
       await saveSettings();
-      syncSettingsToUI();
-      toast(`${settings.openCodeModels.length} ${settings.language === 'zh' ? '个免费模型' : 'free models'}`);
-      setBottomStatus(t('refreshDone'));
+      if (!isCurrent()) return;
+      // Keep the chosen model and any unsaved settings while replacing options.
+      if (fromModal) {
+        buildModelOptions($('modelSetting'), $('modelSetting').value, models);
+      } else {
+        buildModelOptions($('modelQuick'), settings.model, models);
+        if (!$('settingsModal').classList.contains('open')) {
+          buildModelOptions($('modelSetting'), settings.model, models);
+        }
+      }
+      const message = t('refreshDone', { provider: providerName, count: models.length });
+      toast(message);
+      setBottomStatus(message);
     } catch (e) {
+      if (!isCurrent()) return;
       setBottomStatus(`${t('refreshFallback')} · ${e.message}`);
       toast(t('refreshFallback'), 2600);
     } finally {
-      $('refreshModelsBtn').disabled = false;
+      if (modelRefreshRequests[context] === controller) {
+        modelRefreshRequests[context] = null;
+        updateModelRefreshButton(fromModal);
+      }
     }
   }
 
@@ -1484,6 +1570,7 @@
     if (activeConversation?.messages?.length && activeConversation.model !== nextModel) toast(t('modelSwitchToast'), 2600);
     syncSettingsToUI();
     await saveSettings();
+    if (settings.provider === provider) void refreshModels();
     return true;
   }
 
@@ -1684,7 +1771,8 @@
       try { await importJsonFile(file); }
       catch (err) { toast(t('importFailed')); setBottomStatus(`${t('importFailed')} · ${err.message}`); }
     });
-    $('refreshModelsBtn').addEventListener('click', refreshOpenCodeModels);
+    $('refreshModelsBtn').addEventListener('click', () => refreshModels());
+    $('refreshModelsSettingBtn').addEventListener('click', () => refreshModels({ fromModal: true }));
 
     $('providerQuick').addEventListener('change', async e => {
       const old = settings.provider;
@@ -1737,7 +1825,9 @@
       const preset = PROVIDER_PRESETS[provider] || PROVIDER_PRESETS.custom;
       $('apiBaseSetting').value = preset.endpoint;
       $('customModelSetting').value = '';
-      buildModelOptions($('modelSetting'), provider === 'opencode' ? settings.model : preset.model, provider);
+      const candidate = collectSettingsFromModal();
+      buildModelOptions($('modelSetting'), provider === 'opencode' ? settings.model : preset.model, cachedModels(candidate));
+      void refreshModels({ fromModal: true });
     });
     $('languageSetting').addEventListener('change', e => {
       const previous = settings.language;

@@ -7,14 +7,14 @@
   <title>WEAPON OOBE UI</title>
 
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css" crossorigin="anonymous" />
-  <link rel="stylesheet" href="./md-renderer.css?v=2026-09-28-1" />
-  <link rel="stylesheet" href="./app.css?v=2026-09-28-1" />
+  <link rel="stylesheet" href="./md-renderer.css?v=2026-10-02-1" />
+  <link rel="stylesheet" href="./app.css?v=2026-10-02-1" />
   <script defer src="https://cdn.jsdelivr.net/npm/marked@15.0.7/lib/marked.umd.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/dompurify@3.2.6/dist/purify.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.11.1/build/highlight.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js" crossorigin="anonymous"></script>
-  <script defer src="./md-renderer.js?v=2026-09-28-1"></script>
-  <script defer src="./app.js?v=2026-09-28-1"></script>
+  <script defer src="./md-renderer.js?v=2026-10-02-1"></script>
+  <script defer src="./app.js?v=2026-10-02-1"></script>
 
 </head>
 <body>
@@ -32,6 +32,7 @@
   <section class="az-panel top-tools">
     <div class="tool-row primary">
       <select id="modelQuick" class="az-select w-220" aria-label="Model"></select>
+      <button id="refreshModelsBtn" class="az-button" type="button">Refresh models</button>
       <button id="moreBtn" class="az-button" aria-expanded="false" aria-controls="quickPanel">More</button>
     </div>
     <div id="quickPanel" class="quick-panel" aria-hidden="true">
@@ -61,7 +62,6 @@
           <option value="siliconflow">硅基流动</option>
           <option value="custom">Custom API</option>
         </select>
-        <button id="refreshModelsBtn" class="az-button">Refresh models</button>
         <select id="languageQuick" class="az-select w-80" aria-label="Language">
           <option value="zh">中文</option>
           <option value="en">English</option>
@@ -157,6 +157,9 @@
         <div class="setting-row">
           <label for="modelSetting" id="modelSettingLabel">Model</label>
           <select id="modelSetting" class="az-select"></select>
+        </div>
+        <div class="setting-row model-refresh-row">
+          <button id="refreshModelsSettingBtn" class="az-button" type="button">Refresh models</button>
         </div>
         <div class="setting-row">
           <label for="customModelSetting" id="customModelSettingLabel">Custom model</label>

@@ -1232,6 +1232,8 @@
     .top-tools .tool-row.primary { justify-content: flex-start; gap: 8px; }
     .top-tools .tool-row.primary #modelQuick { width: min(300px, 42vw); height: 28px; }
     .top-tools .tool-row.primary #moreBtn { height: 28px; min-width: 56px; }
+    .top-tools .tool-row.primary #refreshModelsBtn { height: 28px; flex-shrink: 0; }
+    .model-refresh-row { padding-left: 137px; }
     .quick-panel {
       left: 20px; right: auto; top: 52px; width: min(430px, calc(100vw - 32px));
       max-height: min(78vh, 620px); overflow-y: auto; align-content: start;
@@ -1255,7 +1257,8 @@
     .top-tools, .chat-panel, .bottom-status { transition: left .5s cubic-bezier(.5,0,.5,1); }
     @media (max-width: 760px) {
       .top-tools { padding: 0 14px; }
-      .top-tools .tool-row.primary #modelQuick { width: min(62vw, 270px); min-width: 130px; }
+      .top-tools .tool-row.primary #modelQuick { width: min(42vw, 270px); min-width: 0; flex-shrink: 1; }
+      .model-refresh-row { padding-left: 8px; }
       .top-tools .tool-row.primary #moreBtn { display: inline-block; }
       .quick-panel { left: 10px; right: auto; top: 49px; width: min(390px, calc(100vw - 20px)); }
       .history-panel.drawer-open, .history-panel.mobile-open,
