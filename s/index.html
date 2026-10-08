@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="referrer" content="no-referrer">
+  <meta name="theme-color" content="#080e1c">
+  <meta name="description" content="S/Link：无需数据库的 URL 压缩短链接平台，使用预置字典、Huffman、DEFLATE 与 Base85。">
+  <title>S/Link · 零存储链接压缩</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='15' fill='%230b1223'/%3E%3Cpath d='M17 26h17m-5 12h18M23 39l18-17' stroke='%2369dbfa' stroke-width='6' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="./style.css">
+  <script defer src="./dictionary-v3.js"></script>
+  <script defer src="./codec.js"></script>
+  <script defer src="./app.js"></script>
+</head>
+<body>
+  <div class="ambient" aria-hidden="true"></div>
+  <div class="shell">
+    <header class="masthead">
+      <a class="brand" href="./" aria-label="S/Link 首页"><span class="brand-icon">↗</span><span>S<span class="slash">/</span>LINK</span></a>
+      <div class="header-info"><span class="status-pulse"></span> STATIC / STATELESS <span class="separator">·</span> v2.0</div>
+    </header>
+
+    <main id="generator">
+      <section class="hero">
+        <div class="eyebrow"><span class="eyebrow-line"></span> URL COMPRESSION ENGINE <span class="eyebrow-line"></span></div>
+        <h1>压缩链接。<br><span class="gradient">不保存映射。</span></h1>
+        <p class="hero-caption">不用数据库，不依赖短码配对。链接在浏览器里压缩为 Base85 字符，访问时直接还原原始 URL。</p>
+        <div class="features" aria-label="主要特性"><span>◈ 5,434 项静态字典</span><span>◈ 342 域名 · 5 类编码策略</span><span>◈ 自动选择最短结果</span></div>
+      </section>
+
+      <section class="composer" aria-labelledby="form-heading">
+        <div class="section-heading"><h2 id="form-heading">创建压缩链接</h2><span class="tiny-tag">BROWSER ONLY</span></div>
+        <form id="generate-form" autocomplete="off">
+          <label for="url-input" class="field-label">原始 URL</label>
+          <div class="url-entry"><span class="input-prefix" aria-hidden="true">↗</span><input id="url-input" type="text" spellcheck="false" autocapitalize="off" autocomplete="url" placeholder="粘贴一个很长很长的网址…" required maxlength="12000"><button type="submit" id="generate-button" class="primary-button">开始压缩 <span aria-hidden="true">→</span></button></div>
+          <div class="input-help"><span>默认使用 HTTPS · 支持 HTTP · 最大 4,096 UTF-8 字节</span><span id="input-length">0 字符</span></div>
+        </form>
+        <div class="samples"><span class="sample-title">试一试</span><button type="button" data-example="https://www.bilibili.com/video/BV1xx411c7mD?spm_id_from=333.1007.tianma.1-1-1.click">Bilibili</button><button type="button" data-example="https://www.douyin.com/video/7451234567891234567?from=search_result">抖音</button><button type="button" data-example="https://www.xiaohongshu.com/explore/66abcde01234567890fedcba?xsec_token=EXAMPLE&amp;xsec_source=pc_feed">小红书</button><button type="button" data-example="https://github.com/login/oauth/authorize?client_id=EXAMPLE&amp;redirect_uri=https%3A%2F%2Fexample.org%2Fauth%2Fcallback&amp;response_type=code&amp;state=DEMO&amp;code_challenge_method=S256&amp;code_challenge=DEMO">OAuth</button><button type="button" data-example="https://www.youtube.com/watch?v=dQw4w9WgXcQ">YouTube</button><button type="button" data-example="https://github.com/openai/gpt-oss/tree/main?tab=readme-ov-file">GitHub</button><button type="button" data-example="https://www.google.com/search?q=large+language+models&amp;sourceid=chrome&amp;ie=UTF-8">Google 搜索</button></div>
+        <p class="footnote">隐私提示：OAuth/SSO 的访问令牌、授权码、state 等内容不会被加密；不要把含敏感凭据的链接公开分享。</p>
+        <p class="error-message" id="form-error" role="alert" hidden></p>
+      </section>
+
+      <section class="result" id="result" hidden aria-labelledby="result-heading">
+        <div class="result-header"><div><span class="check-circle">✓</span><h2 id="result-heading">压缩完成</h2></div><span class="selected-algorithm" id="algorithm">—</span></div>
+        <label for="short-link" class="field-label">可分享的短链接</label>
+        <div class="result-url"><input type="text" id="short-link" readonly spellcheck="false" aria-label="生成的短链接"><button id="copy-button" type="button" class="copy-button">复制链接</button></div>
+        <div class="metrics"><div class="metric"><span class="metric-label">原始网址</span><strong id="original-size">—</strong><small>UTF-8 字节</small></div><div class="metric"><span class="metric-label">压缩数据</span><strong id="compressed-size">—</strong><small>含校验码</small></div><div class="metric"><span class="metric-label">Base85 载荷</span><strong id="encoded-size">—</strong><small>实际 URL 字符</small></div><div class="metric highlight-metric"><span class="metric-label">载荷长度变化</span><strong id="saving-ratio">—</strong><small id="saving-note">相对原始 URL</small></div></div>
+        <p class="footnote" id="result-warning">注：这是自包含短链接，最终分享长度也包含固定域名和 /s/ 路径；较短的原始链接不一定能缩短。</p>
+        <div class="result-actions"><a id="visit-link" target="_blank" rel="noopener noreferrer">测试访问 <span aria-hidden="true">↗</span></a><button type="button" id="new-button">创建下一个 <span aria-hidden="true">→</span></button></div>
+      </section>
+
+      <section class="how-section" aria-labelledby="how-title"><div class="how-intro"><span class="section-overline">HOW IT WORKS</span><h2 id="how-title">让压缩数据<br>成为链接本身。</h2><p>所有操作都在本地浏览器执行。目标 URL 不会为了生成短链而上传或写入数据库。</p></div><div class="steps"><div class="step"><span class="step-num">01</span><div><h3>识别 URL 结构</h3><p>覆盖 B 站、抖音、微博、淘宝、Google、GitHub 及 OAuth/SSO 的 5,434 项字典；结合回溯与动态规划分词。</p></div></div><div class="step"><span class="step-num">02</span><div><h3>多算法择优</h3><p>高频网页前缀直编、字典、Huffman、DEFLATE 和原始数据，按实际传输长度自动择优。</p></div></div><div class="step"><span class="step-num">03</span><div><h3>Base85 自包含链接</h3><p>压缩数据加 CRC16 校验后编码；仅对可能破坏 URL 语法的字符做最少转义。</p></div></div></div></section>
+    </main>
+
+    <main id="redirect-screen" hidden>
+      <div class="redirect-card"><div class="redirect-icon">↗</div><span class="section-overline">SELF-CONTAINED REDIRECT</span><h1>已还原目标地址</h1><p>短链接已在本地解码并通过完整性校验。</p><div class="destination"><span>即将前往</span><strong id="destination-host">—</strong><div id="destination-url" class="destination-url"></div></div><div class="redirect-progress"><div id="redirect-progress-bar"></div></div><div class="redirect-actions"><a id="redirect-go" class="primary-button" rel="noreferrer">立即访问 <span>→</span></a><button type="button" id="redirect-cancel" class="secondary-button">取消自动跳转</button></div><a href="./" class="return-link">← 返回短链接生成器</a></div>
+    </main>
+
+    <main id="invalid-screen" hidden><div class="redirect-card"><div class="redirect-icon warning-icon">!</div><span class="section-overline">INVALID LINK</span><h1>无法解析此链接</h1><p id="decode-error">无效编码或链接内容已损坏。</p><a href="./" class="primary-button return-primary">返回生成器 <span>→</span></a></div></main>
+
+    <footer class="footer"><span>S/LINK <span class="subtle">· STATELESS URL CODEC</span></span><span>BASE85 <span class="divider-dot">/</span> CRC16 <span class="divider-dot">/</span> NO TRACKING</span></footer>
+  </div>
+</body>
+</html>
