@@ -1,4 +1,4 @@
-const CACHE_NAME = 'character-copy-v6-keyboard-symbols';
+const CACHE_NAME = 'character-copy-v7-latex-delimiters';
 const ASSETS = [
   './',
   './index.html',

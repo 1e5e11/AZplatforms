@@ -1354,12 +1354,49 @@ function latexToPlain(latex) {
   return result;
 }
 
+function isLatexDelimiterEscaped(value, index) {
+  var backslashes = 0;
+  while (index > 0 && value.charAt(--index) === '\\') backslashes++;
+  return backslashes % 2 === 1;
+}
+
+function splitLatexInput(value) {
+  var source = String(value).trim()
+    .replace(/^\\\[([\s\S]*)\\\]$/, '$1')
+    .replace(/^\\\(([\s\S]*)\\\)$/, '$1');
+  var parts = [];
+  var start = 0;
+  var i = 0;
+  while (i < source.length) {
+    if (source.charAt(i) !== '$' || isLatexDelimiterEscaped(source, i)) { i++; continue; }
+    var delimiter = source.charAt(i + 1) === '$' ? '$$' : '$';
+    var end = i + delimiter.length;
+    while (end < source.length) {
+      if (source.slice(end, end + delimiter.length) === delimiter && !isLatexDelimiterEscaped(source, end)) break;
+      end++;
+    }
+    // 未闭合的定界符保留到末尾，避免把其中的 $ 误当成另一条公式。
+    if (end >= source.length) break;
+    if (i > start) parts.push({text: source.slice(start, i), math: false});
+    parts.push({text: source.slice(i + delimiter.length, end), math: true});
+    start = end + delimiter.length;
+    i = start;
+  }
+  if (start < source.length || !parts.length) parts.push({text: source.slice(start), math: false});
+  return parts;
+}
+
+function stripLatexDelimiters(value) {
+  return splitLatexInput(value).map(function(part) { return part.text; }).join('').trim();
+}
+
 function convertLatex(input) {
-  var s = input.replace(/^\\\[/, '').replace(/\\\]$/, '');
-  s = s.replace(/^\$\$/, '').replace(/\$\$$/, '');
-  s = s.replace(/^\$/, '').replace(/\$$/, '');
-  s = s.replace(/^\\\(/, '').replace(/\\\)$/, '');
-  s = latexToPlain(s);
+  var parts = splitLatexInput(input);
+  var hasMath = parts.some(function(part) { return part.math; });
+  // 有 $ 定界的公式时，只转换公式内容，保留周围的正文。
+  var s = parts.map(function(part) {
+    return part.math || !hasMath ? latexToPlain(part.text) : part.text;
+  }).join('');
   var errors = [];
   var m = s.match(/\u27E8[^\u27E9]+\u27E9/g);
   if (m) {
@@ -2069,14 +2106,6 @@ var downloadLatexButton = document.getElementById('btn-download-latex');
 function setLatexImageError(message) {
   latexImageError.textContent = message || '';
   latexImageError.classList.toggle('hidden', !message);
-}
-
-function stripLatexDelimiters(value) {
-  return value.trim()
-    .replace(/^\$\$([\s\S]*)\$\$$/, '$1')
-    .replace(/^\\\[([\s\S]*)\\\]$/, '$1')
-    .replace(/^\\\(([\s\S]*)\\\)$/, '$1')
-    .replace(/^\$([\s\S]*)\$$/, '$1');
 }
 
 var mathJaxLoadPromise;
