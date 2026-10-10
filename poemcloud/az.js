@@ -294,8 +294,7 @@ function makeListing(n, rowsLayer, parentStart, parentEnd) {
 }
 
 // 页面中的虚拟 README：说明内容与下载内容共用同一份文本。
-const README_TEXT = `？？？
-`;
+const README_TEXT = `？？？？`;
 const README_BYTES = new TextEncoder().encode(README_TEXT);
 
 // 根目录（8 种诗体 + README）
@@ -414,29 +413,22 @@ async function downloadRange(segCheck, filename) {
     const e = stringToBaseNumber(seg[1]);
     if (s.compare(e) > 0) throw new Error("下载区间起点大于终点");
 
-    const startIndex = baseNumberToIndex(s);
-    const endIndex = baseNumberToIndex(e);
-    const total = endIndex - startIndex + 1n;
     const encoder = new TextEncoder();
     const sink = await createDownloadSink(filename);
     if (!sink) return false;
 
     const cur = s.clone();
-    let generated = 0n;
     let batch = [];
 
     try {
         while (true) {
             batch.push(poemFileText(cur.toStringByTable(table)));
-            generated++;
 
             // 先判断终点再自增，修复区间以字典最大值结尾时的 overflow。
             const atEnd = cur.compare(e) === 0;
             if (batch.length >= DOWNLOAD_BATCH_POEMS || atEnd) {
                 await sink.write(encoder.encode(batch.join("")));
                 batch = [];
-                const percent = Number(generated * 1000n / total) / 10;
-                setDownloadStatus("正在生成 " + percent.toFixed(1) + "%");
                 await yieldToBrowser();
             }
             if (atEnd) break;
@@ -454,12 +446,13 @@ async function downloadRange(segCheck, filename) {
 async function downloadfile(type, check) {
     if (type === "dir") { openDir(check); return; }
     if (downloadInProgress) {
-        alert("已有文件正在生成，请稍候。");
+        alert("已有下载任务，请稍候。");
         return;
     }
 
     downloadInProgress = true;
-    setDownloadStatus("准备下载…");
+    // 下载按批次在后台生成，页面保持安静；失败仍通过原有错误提示报告。
+    setDownloadStatus("");
     try {
         if (check === "README.md") {
             const sink = await createDownloadSink("README.md");
