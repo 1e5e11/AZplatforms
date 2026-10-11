@@ -348,3 +348,234 @@ NVIDIA Developer
 目前仍有三项重要数据没有足够可靠的 Thor-U 专属公开依据：完整 Dense/Sparse 各精度算力表、准确 Tensor Core 数量，以及量产芯片的独立 TDP。不能简单把 Jetson T4000 的对应数据移植过来。
 
 最值得直接查阅的两个 NVIDIA 官方文档是 [Thor-U / Thor-X 功率和单元配置表](https://developer.nvidia.com/docs/drive/drive-os/7.2.5/public/drive-os-linux-sdk-ea/platform-customization/System_Software_Settings/PowerProfiles.html) 与 [Thor-U SKU 与内存配置文档](https://developer.nvidia.com/docs/drive/drive-os/7.2.5/public/drive-os-linux-sdk-ea/getting-started/bind_partitions.html)。
+
+# NVIDIA Thor-U vs DGX Spark（GB10）详细对比
+
+结论：DGX Spark 的 GPU 规模和通用 FP32 算力明显更强，内存容量也大得多；但 Thor-U 的车规级 AI 加速能力很强，公开的 FP4 峰值甚至高于 DGX Spark。两者的 FP4 宣传数字需要区分稀疏计算口径，不能直接判断真实推理速度。
+
+[Nvidia to Produce Superchip for Autonomous Cars | IoT World Today](https://images.openai.com/static-rsc-4/3XiczJv-ZDe9anp72Q6j8HpjyhyNS1mBR77tTUrf0N5XXjT8zYOBiyrlrmjSFr1LeC9T8XwtcMmRwOGkBZL1Sa7Af4VNp6h8C1z15cQ7lrCwa1mf9_3IxNUlNframIXIEZWl1VHmesyNwJfBu3xZMRSLQhJc9FFVHXFJTA1v_Nc?purpose=inline)
+
+DRIVE Thor-U
+
+自动驾驶 SoC · Blackwell
+
+[Nvidia DGX Spark review roundup – a compact, specialised tool for AI development | Club386](https://images.openai.com/static-rsc-4/ijyCSalekpmIXphlDGuxnViITCJinORS54YS0XodMSY6MhWonUYHy7I4HCVlD01IcGTo1nPX44OoNkwLfJc2bt3WLfX5U3ZX4qQcq-eIzknVeIq4l9yZ5rPxdhufGxIB_A1cerl3z21CvnHRYHAIDlocppS-r7Q5grsoKScGpuY?purpose=inline)
+
+DGX Spark（GB10）
+
+桌面 AI 超级计算机 · Grace Blackwell
+
+## 一、核心硬件参数
+
+| 参数             | Thor-U            | DGX Spark               |
+| -------------- | ----------------- | ----------------------- |
+| 芯片             | TA1080SA          | GB10                    |
+| GPU 架构         | Blackwell         | Blackwell               |
+| CPU 架构         | Arm Neoverse V3AE | Arm Cortex-X925/A725    |
+| CPU 核心数        | 12                | 20（10+10）               |
+| CPU 频率         | 2.601 GHz         | 最高约 4.0 GHz             |
+| GPU SM 数       | 14（推算）            | 48                      |
+| CUDA 核心        | 1,792（推算）         | 6,144                   |
+| GPU SM 数量之比    | 1×                | 3.43×                   |
+| GPU 配置频率       | 1.53 GHz          | 动态频率，最高约 3 GHz          |
+| Tensor Core 架构 | 第五代               | 第五代                     |
+| 内存类型           | LPDDR5X           | LPDDR5X                 |
+| 内存容量           | 开发板 32/64 GB      | 128 GB；另有 OEM 64 GB 版本  |
+| 内存位宽           | 256-bit（平台配置）     | 256-bit                 |
+| 理论内存带宽         | 273 GB/s（平台配置）    | 273 GB/s                |
+| 芯片 TDP         | 未公开可靠定值           | 140 W                   |
+| 软件生态           | DRIVE OS          | DGX OS / CUDA / PyTorch |
+| 定位             | 车载实时 AI           | 本地大模型、开发、训练             |
+
+GPU 计算单元和频率依据 NVIDIA DriveOS 7.2.5 官方配置；GB10 的 CUDA 核心、内存、功耗依据 NVIDIA DGX Spark 用户指南。Thor-U 的核心数按每 TPC 两个 SM、每 SM 128 个 CUDA 核心推算。
+
+[image](https://www.google.com/s2/favicons?domain=https://developer.nvidia.com\&sz=32)
+
+NVIDIA Developer
+
++3
+
+
+
+GPU 规模（SM 数量）
+
+Thor-U
+
+14
+
+DGX Spark
+
+48
+
+从 GPU 通用计算资源来看，DGX Spark 不只是多了 3.43 倍 CUDA 核心，其 GPU 频率也通常高于 Thor-U，因此 FP32 算力优势会更加明显。
+
+## 二、各精度算力对比
+
+这里必须特别注意：Thor-U 的 AI 算力主要来自车企公布的数据，而 DGX Spark 有 NVIDIA 官方参数和部分第三方实测。
+
+| 精度          | Thor-U               | DGX Spark（GB10）   |
+| ----------- | -------------------- | ----------------- |
+| FP64 CUDA   | 未确认                  | 约 0.42 TFLOPS 实测  |
+| FP32 CUDA   | 5.48 TFLOPS 理论值      | 约 18.54 TFLOPS 实测 |
+| TF32 Tensor | 未确认                  | 支持，完整峰值未公布        |
+| FP16 Tensor | 约 350 TFLOPS\*       | 约 96.5 TFLOPS 实测  |
+| BF16 Tensor | 未确认                  | 约 96.9 TFLOPS 实测  |
+| FP8 / INT8  | 700 TOPS\*           | 缺少统一可核对峰值         |
+| FP4 Dense   | 未确认                  | 约 500 TFLOPS      |
+| FP4 Sparse  | 1400 TFLOPS\*（口径未明确） | 1000 TFLOPS       |
+
+\* Thor-U 的 FP16/FP8/FP4 来自理想汽车技术人员披露的峰值口径，不是统一条件下的独立实测；Thor-U 的稀疏条件未明确，因此不能把这些数字与 GB10 的实测值直接排序。GB10 的 FP32、FP16、BF16 来自 HPC Systems 的大矩阵测试。
+
+[image](https://www.google.com/s2/favicons?domain=https://www.sina.cn\&sz=32)
+
+Sina Mobile
+
++2
+
+### FP32 通用计算
+
+Thor-U 理论峰值：
+
+\\[ 1792\times2\times1.53=\boxed{5.48\ \mathrm{TFLOPS}} \\]
+
+DGX Spark 如果运行在 2.4 GHz GPU 时钟：
+
+\\[ 6144\times2\times2.4=\boxed{29.49\ \mathrm{TFLOPS}} \\]
+
+FP32 算力比较（TFLOPS）
+
+Thor-U 理论
+
+5.48
+
+GB10 实测
+
+18.54
+
+GB10 理论
+
+29.49
+
+GB10 理论值是假设 2.4 GHz 时钟，并非官方固定频率；18.54 为特定基准测试实测，两种数值不能视为同条件测试。
+
+在相应时钟下，DGX Spark 的 FP32 理论算力约为 Thor-U 的 5.38 倍。如果用于 CUDA 通用计算、非 Tensor Core 的矩阵计算或图像算法，DGX Spark 具有明显的硬件规模优势。
+
+### FP4 Tensor Core：Thor-U 为什么反而可能更高？
+
+Thor-U 披露的数字为 1400 TFLOPS，DGX Spark 官方公布的是 1000 TFLOPS（结构化稀疏）。
+
+GB10 已有针对原生 NVFP4 指令的社区微基准测试，在理想寄存器驻留运算中达到约 500 TFLOPS Dense、1000 TFLOPS Sparse，验证了官方峰值的可达性。
+
+[image](https://www.google.com/s2/favicons?domain=https://forums.developer.nvidia.com\&sz=32)
+
+NVIDIA Developer Forums
+
+
+
+但 Thor-U 的 1400 TFLOPS 缺乏同等条件的公开微基准验证，且它使用的 GPU SM 微架构、Tensor Core 单元配置与 GB10 并不完全相同。
+
+所以，不能用 CUDA 核心数判断 Tensor Core 算力，也不能用 1400÷1000 就认定 Thor-U 的实际 AI 推理快 40%。
+
+## 三、对本地大语言模型的影响
+
+这里的比较比 AI TOPS 更有实际意义。
+
+两者标称内存带宽都是 273 GB/s，因此大型模型单请求、自回归逐 token 解码时，DGX Spark 的 GPU 算力优势不一定能够完全转化成速度优势。
+
+### 可以运行多大的模型？
+
+按通常 4-bit GGUF 量化、考虑额外运行开销的近似值：
+
+| 模型      | 典型权重大小     | Thor-U 64GB | Spark 128GB |
+| ------- | ---------- | ----------- | ----------- |
+| 8B Q4   | 4–6 GB     | 可以          | 可以          |
+| 27B Q4  | 15–18 GB   | 可以          | 可以          |
+| 32B Q4  | 18–22 GB   | 可以          | 可以          |
+| 70B Q4  | 38–45 GB   | 较紧张         | 可以          |
+| 120B Q4 | 65–75 GB   | 通常放不下       | 有希望         |
+| 200B Q4 | 110–125 GB | 不行          | 通常也很紧张      |
+
+DRIVE Thor-U 的实际部署还依赖车载计算域为 AI 分配多少内存，而非简单把 64 GB 全部当成独占 GPU 显存。DGX Spark 的 128 GB 也是 CPU/GPU 共享内存，不是全部可用于模型权重。
+
+### DGX Spark 实际能跑多快？
+
+2026 年公开的 GB10 + llama.cpp 测试提供了一些有参考意义的数据：
+
+| 模型                  | 量化     | 生成速度          |
+| ------------------- | ------ | ------------- |
+| Qwen3.5-27B Dense   | Q4_K_M | 11.94 tok/s   |
+| Qwen3.6-27B Dense   | Q4_K_M | 11.85 tok/s   |
+| Gemma 4-31B Dense   | Q4_K_M | 约 11 tok/s    |
+| Gemma 4-26B-A4B MoE | Q4_K_M | 约 68–70 tok/s |
+
+来自独立社区基准测试，使用的测试版本、提示长度和上下文不完全一致。MoE 的高生成速度主要与每 token 激活参数量较少有关。
+
+[image](https://www.google.com/s2/favicons?domain=https://github.com\&sz=32)
+
+GitHub
+
++1
+
+目前没有找到足够可靠的 Thor-U 同模型、同量化、同推理框架实测，因此不能给出可信的两芯片 tok/s 比值。
+
+## 四、训练能力与实际用途
+
+本地 LLM 推理
+
+DGX Spark 更合适。主要优势是更大内存、更成熟的通用 CUDA 软件环境，以及对 70B 以上模型更宽裕的容量。
+
+Transformer 训练和微调
+
+DGX Spark 更合适。可以使用 PyTorch、CUDA、TensorRT-LLM 等工具。NVIDIA 定位支持本地微调最高 70B 级模型，但具体依赖 LoRA、QLoRA 等内存节省技术，不能理解为支持 70B 全参数 BF16 Adam 训练。
+
+[image](https://www.google.com/s2/favicons?domain=https://nvidianews.nvidia.com\&sz=32)
+
+NVIDIA Newsroom
+
+
+
+自动驾驶与实时视觉 AI
+
+Thor-U 更合适。它具备车载安全岛、ISP、PVA、编码器和其他专用视觉单元，面向传感器融合、确定性延迟和功能安全设计。DGX Spark 并不能代替完整的车规自动驾驶计算平台。
+
+## 五、功耗、接口和扩展
+
+| 指标       | Thor-U      | DGX Spark           |
+| -------- | ----------- | ------------------- |
+| 芯片功耗     | 未获得专属可靠 TDP | 140 W               |
+| 系统电源     | 取决于汽车域控制器   | 240 W               |
+| 独立运行桌面开发 | 不适合普通用户     | 专为此设计               |
+| 外接显示器    | 通过车载平台配置    | HDMI / USB-C DP     |
+| 多机互联     | 车载专用接口      | ConnectX-7 200 Gb/s |
+| 多机大模型    | 取决于车载开发平台   | 支持两机协作              |
+| 操作系统     | DRIVE OS    | DGX OS              |
+| 可购买性     | 主要面向车企及合作伙伴 | 有零售整机               |
+
+DGX Spark 还配有 Wi-Fi 7、10GbE 和 NVMe SSD，支持标准桌面开发环境。
+
+[image](https://www.google.com/s2/favicons?domain=https://docs.nvidia.com\&sz=32)
+
+DGX Spark User Guide
+
+
+
+## 最终结论
+
+| 比较项目            | 优势方             |
+| --------------- | --------------- |
+| CPU 核心数和高频通用计算  | DGX Spark       |
+| GPU CUDA 核心规模   | DGX Spark       |
+| FP32 通用浮点计算     | DGX Spark       |
+| 官方可验证的 FP4 峰值   | DGX Spark 证据更充分 |
+| 纸面 FP4 数值       | Thor-U 更高，口径待统一 |
+| 内存容量            | DGX Spark       |
+| 内存带宽            | 大致相同            |
+| 本地大型 LLM 运行     | DGX Spark       |
+| LLM 微调与 CUDA 开发 | DGX Spark       |
+| 车载传感器和功能安全      | Thor-U          |
+
+最值得关注的是：Thor-U 和 DGX Spark 都属于带宽仅约 273 GB/s 的统一内存 AI 计算平台。
+
+对 27B、32B、70B 这类 Dense LLM 而言，单用户生成速度通常首先受内存带宽制约，而不是标称 FP4 TOPS。DGX Spark 更适合大模型的核心原因不仅是算力，更是它有 128 GB 内存和完整的通用 AI 开发环境。
+
+如果主要目的是运行你关注的 27B GGUF 模型，DGX Spark 的 128 GB 能解决容量限制，但并不意味着它会比高带宽的独立显卡生成得更快。它的突出价值是能在本地装下更大的模型。
