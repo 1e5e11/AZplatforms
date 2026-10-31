@@ -471,6 +471,7 @@
       return;
     }
 
+    document.body.classList.toggle('article-view', PAGE === 'public' && route.name === 'post');
     state.route = route;
     state.lastRoute = previous;
     updateTopbar(route);
@@ -656,21 +657,21 @@
       '<section class="panel glass main-panel article-panel">' +
       '<div class="article-head">' +
       '<a class="back-link" href="#/">← ' + L('返回文章列表', 'Back to posts') + '</a>' +
+      '<div class="article-title-row">' +
       '<h1 class="article-title">' + esc(post.title) + postBadges(post) + '</h1>' +
+      (tags ? '<div class="tag-list article-tags">' + tags + '</div>' : '') +
+      '</div>' +
       '<div class="article-meta">' + esc(fmtDate(post.created_at)) + ' · ' + esc(post.author) + ' · ' +
       esc(post.category) + ' · ' + L(
         Number(post.reading_minutes || 1) + ' 分钟',
         Number(post.reading_minutes || 1) + ' min read'
-      ) + '</div>' +
-      (tags ? '<div class="tag-list article-tags">' + tags + '</div>' : '') +
+      ) +
+      ' · <a class="inline-link" href="' + esc(readerUrl) + '" target="_blank" rel="noopener">' +
+      L('新标签页打开', 'Open in a new tab') + '</a></div>' +
       '</div>' +
       '<div class="reader-shell">' +
       '<iframe class="reader-frame" src="' + esc(readerUrl) + '" title="' + esc(post.title) +
       '" loading="eager" referrerpolicy="no-referrer"></iframe>' +
-      '</div>' +
-      '<div class="reader-fallback">' + L('阅读器没有加载？', 'Reader not loading?') +
-      '<a href="' + esc(readerUrl) + '" target="_blank" rel="noopener">' +
-      L('在新标签页打开', 'Open in a new tab') + '</a>' +
       '</div>' +
       '</section></div>'
     );
