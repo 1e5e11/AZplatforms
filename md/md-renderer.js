@@ -18,6 +18,288 @@
     return { type:'html', raw, text:`<${tag} data-md-math="${displayMode ? 'display' : 'inline'}">${escapeHTML(text.trim())}</${tag}>`, block:displayMode };
   }
 
+  // 裸 LaTeX：没有 $ / \( \) / \[ \] 定界符、直接写在正文里的公式。
+  // 只处理 KaTeX 能完整解析的片段，否则保持原文，避免误伤普通文本。
+  const BARE_MATH_CHARS = new Set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789{}()[]^_=+-/|<>!.,;:'\\&");
+  const BARE_MATH_TRIGGER = /^(?:\\[A-Za-z]+|\^\{|\^[A-Za-z0-9]|_\{)/;
+  const BARE_MATH_WORD = /^[A-Za-z]{2,}$/;
+  const BARE_MATH_MAX = 400;
+  const BARE_DISPLAY_MAX = 4000;
+
+  function isBareMathChar(character) {
+    return BARE_MATH_CHARS.has(character);
+  }
+
+  function collectProtectedRanges(line) {
+    const ranges = [];
+    let index = 0;
+    while (index < line.length) {
+      const character = line[index];
+      if (character === '`') {
+        let length = 1;
+        while (line[index + length] === '`') length++;
+        const close = line.indexOf('`'.repeat(length), index + length);
+        if (close >= 0) { ranges.push([index, close + length]); index = close + length; continue; }
+        index += length; continue;
+      }
+      if (character === '\\' && (line[index + 1] === '(' || line[index + 1] === '[')) {
+        const closer = line[index + 1] === '(' ? '\\)' : '\\]';
+        const close = line.indexOf(closer, index + 2);
+        if (close >= 0) { ranges.push([index, close + 2]); index = close + 2; continue; }
+      }
+      if (character === '$') {
+        if (line[index + 1] === '$') {
+          const close = line.indexOf('$$', index + 2);
+          if (close >= 0) { ranges.push([index, close + 2]); index = close + 2; continue; }
+          index += 2; continue;
+        }
+        let close = index + 1;
+        while (close < line.length && line[close] !== '$') { if (line[close] === '\\') close++; close++; }
+        if (close < line.length) { ranges.push([index, close + 1]); index = close + 1; continue; }
+      }
+      if (character === '<' && (line[index + 1] === '/' || /[A-Za-z!]/.test(line[index + 1] || ''))) {
+        const close = line.indexOf('>', index + 1);
+        if (close >= 0) { ranges.push([index, close + 1]); index = close + 1; continue; }
+      }
+      if ((character === 'h' || character === 'w') && (/^https?:\/\//.test(line.slice(index)) || /^www\./.test(line.slice(index)))) {
+        let close = index;
+        while (close < line.length && !/[\s<>"'）】]/.test(line[close])) close++;
+        ranges.push([index, close]); index = close; continue;
+      }
+      index++;
+    }
+    return ranges;
+  }
+
+  function braceDepths(line, lo, hi) {
+    const depths = new Uint16Array(line.length + 1);
+    let depth = 0;
+    for (let index = 0; index < line.length; index++) {
+      depths[index] = depth;
+      if (index < lo || index >= hi) continue;
+      if (line[index] === '\\') {
+        index++;
+        if (index <= line.length) depths[index] = depth;
+        continue;
+      }
+      if (line[index] === '{') depth++;
+      else if (line[index] === '}') depth = Math.max(0, depth - 1);
+    }
+    depths[line.length] = depth;
+    return depths;
+  }
+
+  function wordEndingAt(line, index, lo) {
+    let start = index;
+    while (start >= lo && /[A-Za-z]/.test(line[start])) start--;
+    return line.slice(start + 1, index + 1);
+  }
+
+  function wordStartingAt(line, index, hi) {
+    let end = index;
+    while (end < hi && /[A-Za-z]/.test(line[end])) end++;
+    return line.slice(index, end);
+  }
+
+  function expandBareSpan(line, start, end, lo, hi, depths) {
+    let left = start, right = end;
+    while (left > lo) {
+      const character = line[left - 1];
+      if (isBareMathChar(character)) { left--; continue; }
+      if (character === ' ' || character === '\t') {
+        let cut = left - 1;
+        while (cut >= lo && (line[cut] === ' ' || line[cut] === '\t')) cut--;
+        if (cut < lo || !isBareMathChar(line[cut])) break;
+        if (depths[cut] === 0 && BARE_MATH_WORD.test(wordEndingAt(line, cut, lo))) break;
+        left = cut;
+        continue;
+      }
+      break;
+    }
+    while (right < hi) {
+      const character = line[right];
+      if (isBareMathChar(character)) { right++; continue; }
+      if (character === ' ' || character === '\t') {
+        let cut = right;
+        while (cut < hi && (line[cut] === ' ' || line[cut] === '\t')) cut++;
+        if (cut >= hi) { right = cut; break; }
+        if (!isBareMathChar(line[cut])) break;
+        if (depths[right] === 0 && BARE_MATH_WORD.test(wordStartingAt(line, cut, hi))) break;
+        right = cut;
+        continue;
+      }
+      break;
+    }
+    return [left, right];
+  }
+
+  function findBareSpans(line, ranges) {
+    const spans = [];
+    const intervals = [];
+    let cursor = 0;
+    for (const [start, end] of ranges) {
+      if (start > cursor) intervals.push([cursor, start]);
+      cursor = Math.max(cursor, end);
+    }
+    intervals.push([cursor, line.length]);
+    for (const [lo, hi] of intervals) {
+      if (hi - lo < 2) continue;
+      const depths = braceDepths(line, lo, hi);
+      let index = lo;
+      while (index < hi) {
+        const character = line[index];
+        if (character !== '\\' && character !== '^' && character !== '_') { index++; continue; }
+        if (character === '\\' && line[index - 1] === '\\') { index++; continue; }
+        const trigger = BARE_MATH_TRIGGER.exec(line.slice(index, hi));
+        if (!trigger || depths[index] > 0) { index++; continue; }
+        const [start, end] = expandBareSpan(line, index, index + trigger[0].length, lo, hi, depths);
+        if (end > start) {
+          spans.push({ start, end });
+          index = end;
+        } else index++;
+      }
+    }
+    spans.sort((left, right) => left.start - right.start);
+    const merged = [];
+    for (const span of spans) {
+      const last = merged[merged.length - 1];
+      if (last && span.start <= last.end) last.end = Math.max(last.end, span.end);
+      else merged.push({ ...span });
+    }
+    return merged;
+  }
+
+  function acceptsBareTeX(raw, displayMode) {
+    const base = raw.trim();
+    if (!base || base.length > (displayMode ? BARE_DISPLAY_MAX : BARE_MATH_MAX)) return null;
+    if (/^[A-Za-z]:[\\/]/.test(base) || base.startsWith('\\\\')) return null;
+    // 扁平化的表格行（如「1 x-1 2 x+1 3 x^2+x+1」）不是公式，避免整行被当成数学。
+    if ((base.match(/\b\d{1,2}[ \t]+[A-Za-z\\]/g) || []).length >= 3) return null;
+    const candidates = [];
+    if (base.includes('\\begin{')) {
+      // 从网页复制时，对齐环境的换行 \\ 常被吞掉，只剩下行首的 [2mm] 之类间距。
+      const aligned = base.replace(/(^|\n)[ \t]*\[(\d*\.?\d+(?:em|mm|cm|pt|ex|px|in|pc))\]/g, '$1\\\\[$2]');
+      if (aligned !== base) candidates.push(aligned);
+    }
+    candidates.push(base);
+    // 从网页复制的 \substack{...\\ (k,n)=1} 常被压成 \(k,n)=1，补回换行但不吞掉括号。
+    const repaired = base.replace(/\\\(/g, "\\\\(").replace(/\\\)/g, "\\\\)");
+    if (repaired !== base) candidates.push(repaired);
+    for (const tex of candidates) {
+      try {
+        katex.renderToString(tex, { throwOnError:true, strict:'ignore', trust:false, displayMode });
+        return tex;
+      } catch { /* Try the next candidate. */ }
+    }
+    return null;
+  }
+
+  function flattenedTableMarkdown(line) {
+    // 网页复制常把两列表格压成「表头表头 1 公式 2 公式 …」的一行。
+    if (!line || /^\s/.test(line) || /[|$]/.test(line)) return null;
+    const tokens = line.trim().split(/\s+/);
+    if (tokens.length < 12 || tokens.length % 2 !== 0) return null;
+    const header = tokens.slice(0, 2);
+    if (header.some(text => !/^[A-Za-z0-9\\{}()[\]^_+\-*=.,;:'/!<>]+$/.test(text))) return null;
+    const rows = [];
+    for (let index = 2; index < tokens.length; index += 2) {
+      const key = tokens[index], value = tokens[index + 1];
+      if (!/^\d{1,3}$/.test(key)) return null;
+      if (!/^[A-Za-z0-9\\{}()[\]^_+\-*=.,;:'/!<>]+$/.test(value)) return null;
+      rows.push([key, value]);
+    }
+    for (let index = 0; index < rows.length; index++) {
+      if (Number(rows[index][0]) !== Number(rows[0][0]) + index) return null;
+    }
+    if (rows.filter(([, value]) => /[\\^_]/.test(value)).length < Math.ceil(rows.length / 2)) return null;
+    const mathCell = text => /[\\^_+\-=]/.test(text) || /^[A-Za-z]$/.test(text) ? `$${text}$` : text;
+    const head = header.map(text => /[\\^_]/.test(text) || /^[A-Za-z]$/.test(text) ? `$${text}$` : text);
+    return `| ${head[0]} | ${head[1]} |\n| --- | --- |\n${rows.map(([key, value]) => `| ${key} | ${mathCell(value)} |`).join('\n')}`;
+  }
+
+  function transformBareLine(line) {
+    if (!/[\\^]|_\{/.test(line)) return line;
+    const spans = findBareSpans(line, collectProtectedRanges(line));
+    if (!spans.length) return line;
+    const trimmedEnd = line.trimEnd().length;
+    if (spans.length === 1 && spans[0].start === 0 && spans[0].end === trimmedEnd && !line.slice(trimmedEnd).trim()) {
+      const tex = acceptsBareTeX(line, true);
+      if (tex) return `\n<div data-md-math="display">${escapeHTML(tex)}</div>\n`;
+    }
+    let result = '', cursor = 0, changed = false;
+    for (const span of spans) {
+      const tex = acceptsBareTeX(line.slice(span.start, span.end), false);
+      if (!tex) continue;
+      result += line.slice(cursor, span.start) + `<span data-md-math="inline">${escapeHTML(tex)}</span>`;
+      cursor = span.end;
+      changed = true;
+    }
+    return changed ? result + line.slice(cursor) : line;
+  }
+
+  function processBareBlock(lines) {
+    const output = lines.slice();
+    const protectedLines = new Array(lines.length).fill(false);
+    let dollar = false, bracket = false;
+    for (let index = 0; index < lines.length; index++) {
+      const trimmed = lines[index].trim();
+      if (trimmed === '$$') { dollar = !dollar; protectedLines[index] = true; continue; }
+      if (trimmed === '\\[' || trimmed === '\\]') { bracket = !bracket; protectedLines[index] = true; continue; }
+      if (dollar || bracket) { protectedLines[index] = true; continue; }
+      if (/^(?: {4,}|\t)/.test(lines[index])) protectedLines[index] = true;
+      else if (/^\s*<[A-Za-z!/]/.test(lines[index]) && !/^\s*<!--\s*md:/.test(lines[index])) protectedLines[index] = true;
+    }
+    const replaced = new Set();
+    for (let index = 0; index < lines.length; index++) {
+      if (protectedLines[index]) continue;
+      const begin = /^\\begin\{([A-Za-z*]+)\}/.exec(lines[index]);
+      if (!begin) continue;
+      const endToken = `\\end{${begin[1]}}`;
+      if (lines[index].includes(endToken)) continue;
+      let end = -1;
+      for (let next = index + 1; next < lines.length; next++) {
+        if (protectedLines[next]) break;
+        if (lines[next].includes(endToken)) { end = next; break; }
+      }
+      if (end < 0) continue;
+      const endAt = lines[end].indexOf(endToken) + endToken.length;
+      if (lines[end].slice(endAt).trim()) continue;
+      const tex = acceptsBareTeX(lines.slice(index, end + 1).join('\n'), true);
+      if (!tex) continue;
+      output[index] = `\n<div data-md-math="display">${escapeHTML(tex)}</div>\n`;
+      replaced.add(index);
+      for (let remove = index + 1; remove <= end; remove++) output[remove] = null;
+      index = end;
+    }
+    for (let index = 0; index < lines.length; index++) {
+      if (protectedLines[index] || replaced.has(index) || output[index] === null) continue;
+      const table = flattenedTableMarkdown(output[index]);
+      if (table) { output[index] = `\n${table}\n`; replaced.add(index); continue; }
+      output[index] = transformBareLine(output[index]);
+    }
+    return output.filter(line => line !== null).join('\n');
+  }
+
+  function expandBareMath(source) {
+    if (!/[\\^]|_\{/.test(source)) return source;
+    const lines = source.replace(/\r\n?/g, '\n').split('\n');
+    const output = [];
+    let block = [], fenced = false, fence = '';
+    const flush = () => { if (block.length) { output.push(processBareBlock(block)); block = []; } };
+    for (const line of lines) {
+      const match = /^ {0,3}(`{3,}|~{3,})/.exec(line);
+      if (fenced) {
+        output.push(line);
+        if (match && match[1][0] === fence[0] && match[1].length >= fence.length) fenced = false;
+        continue;
+      }
+      if (match) { flush(); fenced = true; fence = match[1]; output.push(line); continue; }
+      block.push(line);
+    }
+    flush();
+    return output.join('\n');
+  }
+
   function installMathExtension() {
     if (global.__moyeMathExtensionInstalled) return;
     global.__moyeMathExtensionInstalled = true;
@@ -105,7 +387,7 @@
     parse(markdown, options = {}) {
       const baseURL = options.baseURL || this.baseURL;
       const images = options.images || this.images;
-      const tokens = marked.lexer(markdown);
+      const tokens = marked.lexer(expandBareMath(markdown));
       prepareMathTokens(tokens);
       const groups = [[]];
       for (const token of tokens) {
