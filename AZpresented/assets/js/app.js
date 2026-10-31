@@ -56,7 +56,11 @@
     '已存在': 'Already exists',
     '名称不能为空': 'Name is required',
     '版本不存在': 'Version not found',
-    '服务器内部错误': 'Internal server error'
+    '服务器内部错误': 'Internal server error',
+    '需要管理员权限': 'Admin permission required',
+    '无权操作这篇文章': 'You cannot edit this post',
+    '分类不存在': 'Category does not exist',
+    '作者不存在': 'Author not found'
   };
 
   function translateServerError(message) {
@@ -77,7 +81,7 @@
     lastStatusAt = 0;
     applyStaticLang();
     updateTopbar();
-    if (state.isAdmin && state.route && state.route.name === 'admin') {
+    if (state.role && state.route && state.route.name === 'admin') {
       view.innerHTML = adminHtml();
       if (state.previewMode) refreshPreview();
       setDefaultStatus(true);
@@ -129,6 +133,8 @@
   var state = {
     token: readToken(),
     isAdmin: false,
+    role: null,
+    authorName: '',
     query: '',
     category: '',
     route: null,
@@ -317,9 +323,17 @@
     }
   }
 
+  function applyIdentity(data) {
+    state.role = data.role === 'author' ? 'author' : 'admin';
+    state.authorName = data.role === 'author' ? String(data.name || '') : '';
+    state.isAdmin = state.role === 'admin';
+  }
+
   function clearToken() {
     state.token = '';
     state.isAdmin = false;
+    state.role = null;
+    state.authorName = '';
     try {
       sessionStorage.removeItem(TOKEN_KEY);
     } catch (e) {
@@ -330,24 +344,35 @@
   async function verifyToken() {
     if (!state.token) {
       state.isAdmin = false;
+      state.role = null;
+      state.authorName = '';
       return false;
     }
     try {
-      await request('/auth', { method: 'POST', body: { token: state.token } });
-      state.isAdmin = true;
+      var data = await request('/auth', { method: 'POST', body: { token: state.token } });
+      applyIdentity(data);
       return true;
     } catch (e) {
       state.isAdmin = false;
+      state.role = null;
+      state.authorName = '';
       if (e.status === 401) clearToken();
       return false;
     }
   }
 
+  function resetAdminRoute() {
+    if (PAGE === 'admin' && location.hash !== '#/admin') location.hash = '#/admin';
+    else renderRoute();
+  }
+
   function authError(err) {
     if (err && err.status === 401) {
       clearToken();
+      startNewDraft();
+      state.adminTab = 'write';
       setStatus(L('令牌无效或已过期，请重新登录', 'Invalid or expired token. Please sign in again.'), 'error');
-      renderRoute();
+      resetAdminRoute();
       return true;
     }
     return false;
@@ -356,6 +381,7 @@
   /* ---------- status bar ---------- */
 
   function setStatus(text, tone) {
+    if (!statusbar) return;
     lastStatusAt = Date.now();
     statusbar.textContent = text;
     statusbar.dataset.tone = tone || '';
@@ -368,16 +394,19 @@
   }
 
   function setDefaultStatus(force) {
+    if (!statusbar) return;
     if (!force && Date.now() - lastStatusAt < 4500) return;
     if (PAGE === 'admin') {
       statusbar.textContent = state.isAdmin
         ? L('管理员模式 · 令牌仅保存在当前标签页', 'Admin mode · token kept in this tab only')
-        : L('管理台 · 请输入管理员令牌', 'Admin · token required');
+        : state.role === 'author'
+          ? L(
+            '作者模式 · ' + state.authorName + ' · 只能管理自己的文章',
+            'Author mode · ' + state.authorName + ' · own posts only'
+          )
+          : L('管理台 · 请输入登录令牌', 'Admin · token required');
     } else {
-      statusbar.textContent = L(
-        'Markdown 与 LaTeX · 正文由 ssssssss.eu.org/md 渲染',
-        'Markdown & LaTeX · rendered by ssssssss.eu.org/md'
-      );
+      statusbar.textContent = '';
     }
     statusbar.dataset.tone = '';
   }
@@ -470,6 +499,23 @@
     state.editingDeleted = false;
   }
 
+  function draftDirty() {
+    var d = state.draft;
+    if (!d) return false;
+    return Boolean(d.title.trim() || d.content.trim() || d.excerpt.trim() || d.tags.trim());
+  }
+
+  function startNewPost() {
+    if (draftDirty() && !confirm(L(
+      '开始一篇新文章？当前未保存的内容会清空。',
+      'Start a new post? Unsaved content will be cleared.'
+    ))) return;
+    startNewDraft();
+    state.adminTab = 'write';
+    if (location.hash !== '#/admin') location.hash = '#/admin';
+    else renderRoute();
+  }
+
   /* ---------- public: home ---------- */
 
   function showLoading(label) {
@@ -510,21 +556,16 @@
   }
 
   function homeHtml() {
-    var totalAll = state.categories.reduce(function (sum, c) {
-      return sum + Number(c.count || 0);
-    }, 0);
     var allActive = state.category === '';
-    var categoryRows =
-      '<button class="list-row' + (allActive ? ' active' : '') + '" data-action="filter-category" data-category="">' +
-      '<span class="row-name">' + L('全部', 'All') + '</span><span class="row-count">' +
-      totalAll + '</span></button>' +
+    var categoryChips =
+      '<button class="tag' + (allActive ? ' active' : '') + '" data-action="filter-category" data-category="">' +
+      L('全部', 'All') + '</button>' +
       state.categories
         .map(function (c) {
           var active = state.category === c.name;
           return (
-            '<button class="list-row' + (active ? ' active' : '') + '" data-action="filter-category" data-category="' +
-            esc(c.name) + '"><span class="row-name">' + esc(c.name) + '</span>' +
-            '<span class="row-count">' + Number(c.count || 0) + '</span></button>'
+            '<button class="tag' + (active ? ' active' : '') + '" data-action="filter-category" data-category="' +
+            esc(c.name) + '">' + esc(c.name) + '</button>'
           );
         })
         .join('');
@@ -547,24 +588,9 @@
         ? L('筛选出 ' + state.total + ' 篇', state.total + ' found')
         : postCount(state.total)) +
       '</span></div>' +
+      '<div class="category-strip">' + categoryChips + '</div>' +
       '<div class="post-list">' + rows + '</div>' +
-      '</section>' +
-      '<aside class="side-col">' +
-      '<section class="panel glass side-panel"><div class="panel-head"><h2 class="panel-title">' +
-      L('分类', 'Categories') + '</h2></div>' +
-      '<div class="side-list">' + categoryRows + '</div></section>' +
-      '<section class="panel glass mini-panel"><div class="panel-head"><h2 class="panel-title">' +
-      L('关于', 'About') + '</h2></div>' +
-      '<p class="about-text">' +
-      L(
-        'AZ presented — 一个安静的地方，存放 Markdown 与 LaTeX 写成的文章。前端静态托管，文章由独立的 Node.js API 提供。',
-        'AZ presented — a quiet place for writing in Markdown and LaTeX. The frontend is static; posts live behind a small Node.js API.'
-      ) +
-      '</p>' +
-      '<div class="stat-row"><span>' + L('文章', 'Posts') + '</span><span class="stat-num">' + totalAll + '</span></div>' +
-      '<div class="stat-row"><span>' + L('渲染', 'Rendered by') + '</span><span class="stat-small">ssssssss.eu.org/md</span></div>' +
-      '</section>' +
-      '</aside></div>'
+      '</section></div>'
     );
   }
 
@@ -624,13 +650,6 @@
         return '<button class="tag" data-action="tag-search" data-tag="' + esc(tag) + '">' + esc(tag) + '</button>';
       })
       .join('');
-    var meta =
-      '<div class="meta-row"><span>' + L('作者', 'Author') + '</span><span>' + esc(post.author) + '</span></div>' +
-      '<div class="meta-row"><span>' + L('分类', 'Category') + '</span><span>' + esc(post.category) + '</span></div>' +
-      '<div class="meta-row"><span>' + L('发布', 'Published') + '</span><span>' + esc(fmtDate(post.created_at)) + '</span></div>' +
-      '<div class="meta-row"><span>' + L('更新', 'Updated') + '</span><span>' + esc(fmtDate(post.updated_at)) + '</span></div>' +
-      '<div class="meta-row"><span>' + L('阅读', 'Reading') + '</span><span>' +
-      L(Number(post.reading_minutes || 1) + ' 分钟', Number(post.reading_minutes || 1) + ' min') + '</span></div>';
 
     return (
       '<div class="workspace article-workspace">' +
@@ -643,6 +662,7 @@
         Number(post.reading_minutes || 1) + ' 分钟',
         Number(post.reading_minutes || 1) + ' min read'
       ) + '</div>' +
+      (tags ? '<div class="tag-list article-tags">' + tags + '</div>' : '') +
       '</div>' +
       '<div class="reader-shell">' +
       '<iframe class="reader-frame" src="' + esc(readerUrl) + '" title="' + esc(post.title) +
@@ -651,34 +671,15 @@
       '<div class="reader-fallback">' + L('阅读器没有加载？', 'Reader not loading?') +
       '<a href="' + esc(readerUrl) + '" target="_blank" rel="noopener">' +
       L('在新标签页打开', 'Open in a new tab') + '</a>' +
-      '<span class="dot">·</span><a href="' + esc(rawUrlForPost(post, false)) + '" target="_blank" rel="noopener">' +
-      L('查看原始 Markdown', 'View raw Markdown') + '</a>' +
       '</div>' +
-      '</section>' +
-      '<aside class="side-col">' +
-      '<section class="panel glass side-panel"><div class="panel-head"><h2 class="panel-title">' +
-      L('文章信息', 'Post info') + '</h2></div>' +
-      '<div class="meta-list">' + meta + '</div>' +
-      (tags ? '<div class="tag-list">' + tags + '</div>' : '') +
-      '</section>' +
-      '<section class="panel glass mini-panel"><div class="panel-head"><h2 class="panel-title">' +
-      L('阅读器', 'Reader') + '</h2></div>' +
-      '<p class="about-text">' +
-      L(
-        '正文由独立 Markdown 阅读器渲染，支持 LaTeX、代码高亮与目录。',
-        'The body is rendered by an external Markdown reader with LaTeX, syntax highlighting and outlines.'
-      ) +
-      '</p><a class="op" href="' + esc(readerUrl) + '" target="_blank" rel="noopener">' +
-      L('新标签页打开 →', 'Open in a new tab →') + '</a>' +
-      '</section>' +
-      '</aside></div>'
+      '</section></div>'
     );
   }
 
   /* ---------- admin: entry ---------- */
 
   async function renderAdmin(route, my) {
-    if (!state.isAdmin) {
+    if (!state.role) {
       renderLogin();
       return;
     }
@@ -721,7 +722,8 @@
   function applyTaxonomyDefaults() {
     if (state.editingSlug) return;
     if (!state.draft.category && state.categories.length) state.draft.category = state.categories[0].name;
-    if (!state.draft.author && state.authors.length) state.draft.author = state.authors[0].name;
+    if (state.role === 'author') state.draft.author = state.authorName;
+    else if (!state.draft.author && state.authors.length) state.draft.author = state.authors[0].name;
   }
 
   function renderLogin(message) {
@@ -729,9 +731,12 @@
       '<div class="login-screen"><section class="panel glass login-panel">' +
       '<h1 class="login-title">' + L('管理', 'Admin') + '</h1>' +
       '<p class="login-sub">' +
-      L('输入管理员令牌，发布、编辑和删除文章。', 'Enter the admin token to publish, edit and delete posts.') +
+      L(
+        '输入管理员令牌或作者令牌，进入对应的写作与文章管理界面。',
+        'Enter an admin token or your author token to manage posts.'
+      ) +
       '</p><form id="login-form" autocomplete="off">' +
-      '<label class="field"><span class="field-label">' + L('管理员令牌', 'Admin token') + '</span>' +
+      '<label class="field"><span class="field-label">' + L('登录令牌', 'Access token') + '</span>' +
       '<input id="token-input" class="az-input login-input" type="password" placeholder="' +
       L('粘贴令牌…', 'Paste token…') + '" autocomplete="current-password"></label>' +
       (message ? '<p class="form-error">' + esc(message) + '</p>' : '') +
@@ -763,15 +768,20 @@
       L('文章管理', 'Posts') + '</button>' +
       '</div>' +
       '<div class="admin-bar-ops">' +
+      '<button class="az-button new-post-btn" data-action="new-post">' +
+      L('写新文章', 'New post') + '</button>' +
+      (state.role === 'author' ? '<span class="admin-state">' + esc(state.authorName) + '</span>' : '') +
       (state.editingSlug && !manage ? '<span class="admin-state">' + L('编辑中', 'Editing') + '</span>' : '') +
-      '<a class="op" href="#/">' + L('博客', 'Blog') + '</a>' +
+      '<a class="op" href="' + hrefFor('index.html') + '">' + L('博客', 'Blog') + '</a>' +
       '<button class="op" data-action="logout">' + L('退出', 'Sign out') + '</button>' +
       '</div></div>' +
       (manage ? manageHtml() : editorHtml()) +
-      '</section>' +
-      '<aside class="side-col admin-side">' +
-      (manage ? statsPanel() + taxonomyPanel() : publishPanel() + versionsPanel() + taxonomyPanel()) +
-      '</aside></div>'
+      '<div class="admin-bottom">' +
+      (manage
+        ? (state.isAdmin ? statsPanel() : '') + taxonomyPanel()
+        : publishPanel() + versionsPanel() + taxonomyPanel()) +
+      '</div>' +
+      '</section></div>'
     );
   }
 
@@ -789,6 +799,16 @@
         return '<option value="' + esc(c.name) + '"></option>';
       })
       .join('');
+    var categorySelectOptions = state.categories
+      .map(function (c) {
+        return '<option value="' + esc(c.name) + '"' +
+          (c.name === d.category ? ' selected' : '') + '>' + esc(c.name) + '</option>';
+      })
+      .join('');
+    if (d.category && !state.categories.some(function (c) { return c.name === d.category; })) {
+      categorySelectOptions = '<option value="' + esc(d.category) + '" selected>' +
+        esc(d.category) + '</option>' + categorySelectOptions;
+    }
 
     return (
       '<div class="editor">' +
@@ -800,12 +820,19 @@
       '<input class="az-input editor-title" data-field="title" value="' + esc(d.title) +
       '" placeholder="' + L('文章标题', 'Post title') + '" aria-label="' + L('文章标题', 'Post title') + '">' +
       '<div class="editor-meta">' +
-      '<label class="field inline"><span class="field-label">' + L('作者', 'Author') + '</span>' +
-      '<input class="az-input" data-field="author" list="author-options" value="' + esc(d.author) +
-      '" placeholder="' + L('佚名', 'Anonymous') + '"></label>' +
+      (state.role === 'author'
+        ? '<span class="field inline"><span class="field-label">' + L('作者', 'Author') +
+          '</span><span class="readonly-value">' + esc(state.authorName) + '</span></span>'
+        : '<label class="field inline"><span class="field-label">' + L('作者', 'Author') + '</span>' +
+          '<input class="az-input" data-field="author" list="author-options" value="' + esc(d.author) +
+          '" placeholder="' + L('佚名', 'Anonymous') + '"></label>') +
       '<label class="field inline"><span class="field-label">' + L('分类', 'Category') + '</span>' +
-      '<input class="az-input" data-field="category" list="category-options" value="' + esc(d.category) +
-      '" placeholder="' + L('未分类', 'Uncategorized') + '"></label>' +
+      (state.role === 'author'
+        ? '<select class="az-input" data-field="category" aria-label="' + L('分类', 'Category') + '">' +
+          categorySelectOptions + '</select>'
+        : '<input class="az-input" data-field="category" list="category-options" value="' + esc(d.category) +
+          '" placeholder="' + L('未分类', 'Uncategorized') + '">') +
+      '</label>' +
       '<label class="field inline"><span class="field-label">' + L('发布', 'Published') + '</span>' +
       '<input class="az-input" type="datetime-local" data-field="created_at" value="' + esc(d.created_at) + '"></label>' +
       (editing
@@ -862,12 +889,14 @@
       '<textarea class="az-textarea small" data-field="excerpt" rows="3" placeholder="' +
       L('留空则自动截取', 'Auto-generated if empty') + '">' +
       esc(d.excerpt) + '</textarea></label>' +
-      '<div class="flag-row">' +
-      '<label class="check"><input type="checkbox" data-flag="pinned"' + (d.pinned ? ' checked' : '') + '>' +
-      L('置顶', 'Pinned') + '</label>' +
-      '<label class="check"><input type="checkbox" data-flag="featured"' + (d.featured ? ' checked' : '') + '>' +
-      L('精选', 'Featured') + '</label>' +
-      '</div>' +
+      (state.isAdmin
+        ? '<div class="flag-row">' +
+          '<label class="check"><input type="checkbox" data-flag="pinned"' + (d.pinned ? ' checked' : '') + '>' +
+          L('置顶', 'Pinned') + '</label>' +
+          '<label class="check"><input type="checkbox" data-flag="featured"' + (d.featured ? ' checked' : '') + '>' +
+          L('精选', 'Featured') + '</label>' +
+          '</div>'
+        : '') +
       '<div class="publish-actions">' +
       '<button class="az-confirm publish-button" data-action="publish"' +
       (state.saving || state.editingDeleted ? ' disabled' : '') + '>' +
@@ -933,40 +962,68 @@
   }
 
   function taxonomyPanel() {
-    function block(kind) {
+    function rowsFor(kind, manageable) {
+      var isAuthor = kind === 'author';
+      var items = isAuthor ? state.authors : state.categories;
+      if (!items.length) return '<p class="hint">' + L('暂无。', 'None.') + '</p>';
+      return items
+        .map(function (item) {
+          return (
+            '<div class="tax-row">' +
+            '<button class="tax-name" data-action="tax-pick" data-kind="' + kind + '" data-name="' +
+            esc(item.name) + '">' + esc(item.name) + '</button>' +
+            '<span class="tax-count">' + Number(item.count || 0) + '</span>' +
+            (isAuthor && manageable
+              ? '<button class="op tax-token" data-action="issue-token" data-name="' + esc(item.name) + '">' +
+                (item.has_token ? L('换令牌', 'New token') : L('发令牌', 'Token')) + '</button>' +
+                (item.has_token
+                  ? '<button class="op tax-token" data-action="revoke-token" data-name="' + esc(item.name) + '">' +
+                    L('撤销', 'Revoke') + '</button>'
+                  : '')
+              : '') +
+            (manageable
+              ? '<button class="op tax-del" data-action="tax-delete" data-kind="' + kind + '" data-name="' +
+                esc(item.name) + '" title="' + L('删除', 'Delete') + '">×</button>'
+              : '') +
+            '</div>'
+          );
+        })
+        .join('');
+    }
+
+    function block(kind, manageable) {
       var isCat = kind === 'category';
       var label = isCat ? L('分类', 'Categories') : L('作者', 'Authors');
       var newLabel = isCat ? L('新分类', 'New category') : L('新作者', 'New author');
-      var items = isCat ? state.categories : state.authors;
-      var rows = items.length
-        ? items
-            .map(function (item) {
-              return (
-                '<div class="tax-row">' +
-                '<button class="tax-name" data-action="tax-pick" data-kind="' + kind + '" data-name="' +
-                esc(item.name) + '">' + esc(item.name) + '</button>' +
-                '<span class="tax-count">' + Number(item.count || 0) + '</span>' +
-                '<button class="op tax-del" data-action="tax-delete" data-kind="' + kind + '" data-name="' +
-                esc(item.name) + '" title="' + L('删除', 'Delete') + '">×</button>' +
-                '</div>'
-              );
-            })
-            .join('')
-        : '<p class="hint">' + L('暂无。', 'None.') + '</p>';
       return (
         '<div class="tax-block"><div class="tax-head"><span>' + label + '</span><span class="tax-hint">' +
         L('点击选用', 'Click to use') + '</span></div>' +
-        '<div class="tax-list">' + rows + '</div>' +
-        '<div class="tax-add"><input id="tax-' + kind + '-input" class="az-input" placeholder="' + newLabel +
-        '" aria-label="' + newLabel + '"><button class="az-button" data-action="tax-add" data-kind="' + kind + '">' +
-        L('添加', 'Add') + '</button></div></div>'
+        '<div class="tax-list">' + rowsFor(kind, manageable) + '</div>' +
+        (manageable
+          ? '<div class="tax-add"><input id="tax-' + kind + '-input" class="az-input" placeholder="' + newLabel +
+            '" aria-label="' + newLabel + '"><button class="az-button" data-action="tax-add" data-kind="' + kind + '">' +
+            L('添加', 'Add') + '</button></div>'
+          : '') +
+        '</div>'
       );
     }
+
+    if (!state.isAdmin) {
+      return (
+        '<section class="panel glass side-panel tax-panel">' +
+        '<div class="panel-head"><h2 class="panel-title">' + L('分类', 'Categories') + '</h2></div>' +
+        '<div class="tax-block"><div class="tax-head"><span></span><span class="tax-hint">' +
+        L('点击选用', 'Click to use') + '</span></div>' +
+        '<div class="tax-list">' + rowsFor('category', false) + '</div></div>' +
+        '</section>'
+      );
+    }
+
     return (
       '<section class="panel glass side-panel tax-panel">' +
       '<div class="panel-head"><h2 class="panel-title">' + L('分类与作者', 'Categories & authors') + '</h2></div>' +
-      block('category') +
-      block('author') +
+      block('category', true) +
+      block('author', true) +
       '</section>'
     );
   }
@@ -1000,8 +1057,10 @@
                 '" target="_blank" rel="noopener">' + L('查看', 'View') + '</a>' +
                 '<button class="op" data-action="edit-post" data-slug="' + esc(post.slug) + '">' +
                 L('编辑', 'Edit') + '</button>' +
-                '<button class="op" data-action="delete-post" data-slug="' + esc(post.slug) + '">' +
-                L('删除', 'Delete') + '</button>' +
+                (state.isAdmin
+                  ? '<button class="op" data-action="delete-post" data-slug="' + esc(post.slug) + '">' +
+                    L('删除', 'Delete') + '</button>'
+                  : '') +
                 '<button class="op" data-action="view-versions" data-slug="' + esc(post.slug) + '">' +
                 L('版本', 'Versions') + '</button>';
             return (
@@ -1022,8 +1081,9 @@
         L('去写第一篇', 'Write the first post') + '</button></div>';
 
     return (
-      '<div class="manage-list-head"><h2 class="panel-title">' + L('文章管理', 'Manage posts') + '</h2>' +
-      '<span class="panel-note">' + postCount(state.adminPosts.length) + '</span></div>' +
+      '<div class="manage-list-head"><h2 class="panel-title">' +
+      L(state.isAdmin ? '文章管理' : '我的文章', state.isAdmin ? 'Manage posts' : 'My posts') +
+      '</h2><span class="panel-note">' + postCount(state.adminPosts.length) + '</span></div>' +
       '<div class="manage-list">' + rows + '</div>'
     );
   }
@@ -1162,6 +1222,121 @@
       else window.open(url, '_blank', 'noopener');
     } catch (e) {
       if (win) win.close();
+      if (!authError(e)) setStatus(e.message, 'error');
+    }
+  }
+
+  var tokenModalEl = null;
+
+  function closeTokenModal() {
+    if (tokenModalEl) {
+      tokenModalEl.remove();
+      tokenModalEl = null;
+    }
+  }
+
+  function copyText(text, done) {
+    function fallback() {
+      var area = document.createElement('textarea');
+      area.value = text;
+      area.style.position = 'fixed';
+      area.style.opacity = '0';
+      document.body.appendChild(area);
+      area.select();
+      try {
+        document.execCommand('copy');
+      } catch (e) {
+        /* ignore */
+      }
+      area.remove();
+      done();
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done).catch(fallback);
+    } else {
+      fallback();
+    }
+  }
+
+  function showTokenModal(name, token) {
+    closeTokenModal();
+    var wrap = document.createElement('div');
+    wrap.className = 'modal-backdrop';
+    wrap.innerHTML =
+      '<section class="panel glass token-modal" role="dialog" aria-modal="true">' +
+      '<button class="token-close" data-token-action="close" aria-label="' + L('关闭', 'Close') + '">X</button>' +
+      '<h2 class="panel-title">' + L('作者令牌', 'Author token') + '</h2>' +
+      '<p class="token-name">' + esc(name) + '</p>' +
+      '<p class="token-hint">' +
+      L(
+        '令牌只显示这一次。请立即复制并安全发送给该作者；重新生成后旧令牌会立即失效。',
+        'This token is shown only once. Copy it now and send it securely; generating a new token invalidates the old one.'
+      ) +
+      '</p>' +
+      '<input class="az-input token-value" readonly value="' + esc(token) + '">' +
+      '<div class="token-actions">' +
+      '<button class="az-button" data-token-action="copy">' + L('复制', 'Copy') + '</button>' +
+      '<button class="az-button" data-token-action="close">' + L('关闭', 'Close') + '</button>' +
+      '</div></section>';
+    document.body.appendChild(wrap);
+    tokenModalEl = wrap;
+    var input = wrap.querySelector('.token-value');
+    input.focus();
+    input.select();
+    wrap.addEventListener('click', function (event) {
+      if (event.target === wrap) {
+        closeTokenModal();
+        return;
+      }
+      var button = event.target.closest('[data-token-action]');
+      if (!button) return;
+      if (button.dataset.tokenAction === 'close') {
+        closeTokenModal();
+      } else if (button.dataset.tokenAction === 'copy') {
+        copyText(token, function () {
+          button.textContent = L('已复制', 'Copied');
+        });
+      }
+    });
+  }
+
+  async function issueToken(name) {
+    if (!state.isAdmin) return;
+    var author = state.authors.find(function (a) {
+      return a.name === name;
+    });
+    if (author && author.has_token && !confirm(L(
+      '重新生成令牌？旧令牌会立即失效。',
+      'Generate a new token? The old token stops working immediately.'
+    ))) return;
+    try {
+      var data = await request('/authors/' + encodeURIComponent(name) + '/token', {
+        method: 'POST',
+        auth: true
+      });
+      showTokenModal(name, data.token);
+      await loadTaxonomy(true);
+      await renderRoute();
+    } catch (e) {
+      if (!authError(e)) setStatus(e.message, 'error');
+    }
+  }
+
+  async function revokeToken(name) {
+    if (!state.isAdmin) return;
+    if (!confirm(L(
+      '撤销该作者的令牌？对方下次请求时会被登出。',
+      'Revoke this author token? They will be signed out on their next request.'
+    ))) return;
+    try {
+      await request('/authors/' + encodeURIComponent(name) + '/token', {
+        method: 'DELETE',
+        auth: true
+      });
+      await loadTaxonomy(true);
+      setStatus(L('令牌已撤销', 'Token revoked'));
+      await renderRoute();
+    } catch (e) {
       if (!authError(e)) setStatus(e.message, 'error');
     }
   }
@@ -1316,11 +1491,14 @@
         startNewDraft();
         state.adminTab = 'write';
         setStatus(L('已退出管理', 'Signed out'));
-        renderRoute();
+        resetAdminRoute();
         break;
       case 'admin-write':
         state.adminTab = 'write';
         renderRoute();
+        break;
+      case 'new-post':
+        startNewPost();
         break;
       case 'admin-manage':
         state.adminTab = 'manage';
@@ -1353,6 +1531,12 @@
         break;
       case 'tax-delete':
         deleteTaxonomy(target.dataset.kind, target.dataset.name);
+        break;
+      case 'issue-token':
+        issueToken(target.dataset.name);
+        break;
+      case 'revoke-token':
+        revokeToken(target.dataset.name);
         break;
       case 'tax-pick': {
         var kind = target.dataset.kind;
@@ -1410,10 +1594,12 @@
     var button = event.target.querySelector('button[type="submit"]');
     if (button) button.disabled = true;
     try {
-      await request('/auth', { method: 'POST', body: { token: token } });
+      var auth = await request('/auth', { method: 'POST', body: { token: token } });
       setToken(token);
-      state.isAdmin = true;
-      setStatus(L('已进入管理台', 'Signed in'));
+      applyIdentity(auth);
+      setStatus(auth.role === 'admin'
+        ? L('已进入管理台', 'Signed in as admin')
+        : L('已以作者身份登录：' + auth.name, 'Signed in as author: ' + auth.name));
       renderRoute();
     } catch (e) {
       if (button) button.disabled = false;
@@ -1438,6 +1624,10 @@
   }
 
   window.addEventListener('hashchange', renderRoute);
+
+  document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape') closeTokenModal();
+  });
 
   async function init() {
     if (PAGE === 'public') state.token = '';
