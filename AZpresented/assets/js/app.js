@@ -14,6 +14,17 @@
   var RENDERER = String(cfg.rendererBase).replace(/\/+$/, '');
   var TOKEN_KEY = 'abyss_admin_token';
   var LANG_KEY = 'abyss_lang';
+  var AI_KEY_STORE = 'abyss_deepseek_key';
+  var DEEPSEEK_URL = 'https://api.deepseek.com/chat/completions';
+  var DEEPSEEK_MODEL = 'deepseek-chat';
+  var AI_AUTHOR = (function () {
+    try {
+      return localStorage.getItem('abyss_default_author') || 'AI';
+    } catch (e) {
+      return 'AI';
+    }
+  })();
+  var MAX_IMAGE_BYTES = 10 * 1024 * 1024;
   var PAGE = document.body.getAttribute('data-page') === 'admin' ? 'admin' : 'public';
   var view = document.getElementById('view');
   var statusbar = document.getElementById('statusbar');
@@ -41,6 +52,12 @@
     '令牌无效': 'Invalid token',
     '尝试次数过多，请稍后再试': 'Too many attempts. Try again later.',
     '请求体过大': 'Request body too large',
+    '图片内容为空': 'The image is empty',
+    '不支持的图片格式': 'Unsupported image format',
+    '图片过大': 'Image is too large',
+    '图片不存在': 'Image not found',
+    '导入数据格式无效': 'Invalid import data',
+    '数据格式无效': 'Invalid data format',
     'JSON 格式无效': 'Invalid JSON',
     '请求体长度无效': 'Invalid request length',
     '接口不存在': 'Endpoint not found',
@@ -51,7 +68,6 @@
     '标题不能为空': 'Title is required',
     '正文不能为空': 'Body is required',
     '标题过长': 'Title is too long',
-    '正文过长': 'Body is too long',
     '发布时间格式无效': 'Invalid publish date',
     '已存在': 'Already exists',
     '名称不能为空': 'Name is required',
@@ -130,6 +146,23 @@
     }
   }
 
+  function readAiKey() {
+    try {
+      return localStorage.getItem(AI_KEY_STORE) || '';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function writeAiKey(key) {
+    try {
+      if (key) localStorage.setItem(AI_KEY_STORE, key);
+      else localStorage.removeItem(AI_KEY_STORE);
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
   var state = {
     token: readToken(),
     isAdmin: false,
@@ -149,8 +182,14 @@
     versions: [],
     currentVersion: 0,
     adminPosts: [],
+    selectedSlugs: {},
+    logsFiles: [],
+    logFile: '',
+    logsEntries: [],
+    logsErrorsOnly: false,
     previewMode: false,
     saving: false,
+    aiBusy: false,
     editingDeleted: false
   };
   state.draft = emptyDraft();
@@ -158,6 +197,7 @@
   var ticket = 0;
   var searchTimer = null;
   var previewTimer = null;
+  var imageAnchor = null;
   var statusTimer = null;
   var lastStatusAt = 0;
 
@@ -695,12 +735,21 @@
         state.editingDeleted = Boolean(data.post.deleted);
         state.versions = data.versions || [];
         state.currentVersion = state.versions.length ? state.versions[0].version : 0;
+      } else if (state.adminTab === 'logs' && state.isAdmin) {
+        await loadLogs();
       } else {
         applyTaxonomyDefaults();
         if (state.adminTab === 'manage') {
           var list = await request('/admin/posts', { auth: true });
           if (my !== ticket) return;
           state.adminPosts = list.posts || [];
+          var available = {};
+          state.adminPosts.forEach(function (post) {
+            if (!post.deleted) available[post.slug] = true;
+          });
+          Object.keys(state.selectedSlugs).forEach(function (slug) {
+            if (!available[slug]) delete state.selectedSlugs[slug];
+          });
         }
       }
       if (my !== ticket) return;
@@ -722,9 +771,12 @@
 
   function applyTaxonomyDefaults() {
     if (state.editingSlug) return;
-    if (!state.draft.category && state.categories.length) state.draft.category = state.categories[0].name;
-    if (state.role === 'author') state.draft.author = state.authorName;
-    else if (!state.draft.author && state.authors.length) state.draft.author = state.authors[0].name;
+    if (state.role === 'author') {
+      state.draft.author = state.authorName;
+      if (!state.draft.category && state.categories.length) state.draft.category = state.categories[0].name;
+    } else if (!state.draft.author) {
+      state.draft.author = AI_AUTHOR;
+    }
   }
 
   function renderLogin(message) {
@@ -757,30 +809,43 @@
   /* ---------- admin: layout ---------- */
 
   function adminHtml() {
+    var write = state.adminTab === 'write';
     var manage = state.adminTab === 'manage';
+    var logs = state.isAdmin && state.adminTab === 'logs';
     return (
       '<div class="workspace admin-workspace">' +
       '<section class="panel glass main-panel admin-main">' +
       '<div class="admin-bar">' +
       '<div class="tabs">' +
-      '<button class="tab' + (manage ? '' : ' active') + '" data-action="admin-write">' +
+      '<button class="tab' + (write ? ' active' : '') + '" data-action="admin-write">' +
       L('写作', 'Write') + '</button>' +
       '<button class="tab' + (manage ? ' active' : '') + '" data-action="admin-manage">' +
       L('文章管理', 'Posts') + '</button>' +
+      (state.isAdmin
+        ? '<button class="tab' + (logs ? ' active' : '') + '" data-action="admin-logs">' +
+          L('日志', 'Logs') + '</button>'
+        : '') +
       '</div>' +
       '<div class="admin-bar-ops">' +
       '<button class="az-button new-post-btn" data-action="new-post">' +
       L('写新文章', 'New post') + '</button>' +
+      (state.isAdmin
+        ? '<button class="op ai-settings-btn" data-action="ai-settings" title="' +
+          L('配置 DeepSeek API Key', 'Configure DeepSeek API key') + '">' +
+          L('AI 设置', 'AI settings') + '</button>'
+        : '') +
       (state.role === 'author' ? '<span class="admin-state">' + esc(state.authorName) + '</span>' : '') +
       (state.editingSlug && !manage ? '<span class="admin-state">' + L('编辑中', 'Editing') + '</span>' : '') +
       '<a class="op" href="' + hrefFor('index.html') + '">' + L('博客', 'Blog') + '</a>' +
       '<button class="op" data-action="logout">' + L('退出', 'Sign out') + '</button>' +
       '</div></div>' +
-      (manage ? manageHtml() : editorHtml()) +
+      (logs ? logsHtml() : manage ? manageHtml() : editorHtml()) +
       '<div class="admin-bottom">' +
-      (manage
-        ? (state.isAdmin ? statsPanel() : '') + taxonomyPanel()
-        : publishPanel() + versionsPanel() + taxonomyPanel()) +
+      (logs
+        ? ''
+        : manage
+          ? (state.isAdmin ? statsPanel() : '') + taxonomyPanel()
+          : publishPanel() + versionsPanel() + taxonomyPanel()) +
       '</div>' +
       '</section></div>'
     );
@@ -819,7 +884,10 @@
           L('恢复到文章列表', 'Restore to posts') + '</button></div>'
         : '') +
       '<input class="az-input editor-title" data-field="title" value="' + esc(d.title) +
-      '" placeholder="' + L('文章标题', 'Post title') + '" aria-label="' + L('文章标题', 'Post title') + '">' +
+      '" placeholder="' + (state.isAdmin
+        ? L('文章标题（留空由 AI 生成）', 'Post title (blank = AI generates)')
+        : L('文章标题', 'Post title')) +
+      '" aria-label="' + L('文章标题', 'Post title') + '">' +
       '<div class="editor-meta">' +
       (state.role === 'author'
         ? '<span class="field inline"><span class="field-label">' + L('作者', 'Author') +
@@ -832,7 +900,7 @@
         ? '<select class="az-input" data-field="category" aria-label="' + L('分类', 'Category') + '">' +
           categorySelectOptions + '</select>'
         : '<input class="az-input" data-field="category" list="category-options" value="' + esc(d.category) +
-          '" placeholder="' + L('未分类', 'Uncategorized') + '">') +
+          '" placeholder="' + L('留空由 AI 生成', 'Blank = AI generates') + '">') +
       '</label>' +
       '<label class="field inline"><span class="field-label">' + L('发布', 'Published') + '</span>' +
       '<input class="az-input" type="datetime-local" data-field="created_at" value="' + esc(d.created_at) + '"></label>' +
@@ -859,10 +927,12 @@
       '<button class="op" data-action="md-insert" data-kind="math">' + L('公式', 'Math') + '</button>' +
       '<button class="op" data-action="md-insert" data-kind="mathblock">' + L('公式块', 'Math block') + '</button>' +
       '<button class="op" data-action="md-insert" data-kind="link">' + L('链接', 'Link') + '</button>' +
+      '<button class="op" data-action="md-image">' + L('图片', 'Image') + '</button>' +
       '<button class="op" data-action="md-insert" data-kind="quote">' + L('引用', 'Quote') + '</button>' +
       '<button class="op" data-action="md-insert" data-kind="list">' + L('列表', 'List') + '</button>' +
       '<button class="op" data-action="md-insert" data-kind="codeblock">' + L('代码块', 'Code block') + '</button>' +
       '</div>' +
+      '<input id="image-input" type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden>' +
       '<div id="editor-pane" class="editor-pane"' + (previewing ? ' hidden' : '') + '>' +
       '<textarea id="content-editor" class="az-textarea editor-textarea" data-field="content" ' +
       'placeholder="' + L(
@@ -900,8 +970,10 @@
         : '') +
       '<div class="publish-actions">' +
       '<button class="az-confirm publish-button" data-action="publish"' +
-      (state.saving || state.editingDeleted ? ' disabled' : '') + '>' +
-      (state.saving
+      (state.saving || state.aiBusy || state.editingDeleted ? ' disabled' : '') + '>' +
+      (state.aiBusy
+        ? L('AI 生成中…', 'Generating…')
+        : state.saving
         ? L('保存中…', 'Saving…')
         : state.editingDeleted
           ? L('文章在回收站', 'In trash')
@@ -975,7 +1047,9 @@
             esc(item.name) + '">' + esc(item.name) + '</button>' +
             '<span class="tax-count">' + Number(item.count || 0) + '</span>' +
             (isAuthor && manageable
-              ? '<button class="op tax-token" data-action="issue-token" data-name="' + esc(item.name) + '">' +
+              ? '<button class="op tax-token" data-action="rename-author" data-name="' + esc(item.name) + '">' +
+                L('改名', 'Rename') + '</button>' +
+                '<button class="op tax-token" data-action="issue-token" data-name="' + esc(item.name) + '">' +
                 (item.has_token ? L('换令牌', 'New token') : L('发令牌', 'Token')) + '</button>' +
                 (item.has_token
                   ? '<button class="op tax-token" data-action="revoke-token" data-name="' + esc(item.name) + '">' +
@@ -1046,9 +1120,16 @@
   }
 
   function manageHtml() {
+    var activePosts = state.adminPosts.filter(function (post) { return !post.deleted; });
+    var selectedCount = activePosts.filter(function (post) {
+      return Boolean(state.selectedSlugs[post.slug]);
+    }).length;
+    var allSelected = activePosts.length > 0 && selectedCount === activePosts.length;
     var rows = state.adminPosts.length
       ? state.adminPosts
           .map(function (post) {
+            var selectable = state.isAdmin && !post.deleted;
+            var selected = selectable && Boolean(state.selectedSlugs[post.slug]);
             var ops = post.deleted
               ? '<button class="op" data-action="restore-post" data-slug="' + esc(post.slug) + '">' +
                 L('恢复', 'Restore') + '</button>' +
@@ -1066,6 +1147,11 @@
                 L('版本', 'Versions') + '</button>';
             return (
               '<div class="manage-row' + (post.deleted ? ' deleted' : '') + '">' +
+              (selectable
+                ? '<label class="check manage-select"><input type="checkbox" data-select-slug="' +
+                  esc(post.slug) + '"' + (selected ? ' checked' : '') + ' aria-label="' +
+                  L('选择文章', 'Select post') + '"></label>'
+                : '') +
               '<div class="manage-main">' +
               '<div class="manage-title">' + esc(post.title) + postBadges(post) +
               (post.deleted ? '<span class="badge">' + L('回收站', 'Trash') + '</span>' : '') + '</div>' +
@@ -1084,9 +1170,384 @@
     return (
       '<div class="manage-list-head"><h2 class="panel-title">' +
       L(state.isAdmin ? '文章管理' : '我的文章', state.isAdmin ? 'Manage posts' : 'My posts') +
-      '</h2><span class="panel-note">' + postCount(state.adminPosts.length) + '</span></div>' +
+      '</h2><span class="panel-note">' + postCount(state.adminPosts.length) + '</span>' +
+      (state.isAdmin
+        ? '<div class="manage-tools">' +
+          '<label class="check">' +
+          '<input type="checkbox" data-select-all' + (allSelected ? ' checked' : '') + '>' +
+          L('全选', 'All') + '</label>' +
+          '<button class="op" data-action="export-selected">' + L('导出选中', 'Export selected') +
+          ' (<span id="export-count">' + selectedCount + '</span>)</button>' +
+          '<button class="op" data-action="export-all">' + L('导出全部', 'Export all') + '</button>' +
+          '<button class="op" data-action="import-posts">' + L('导入 JSON', 'Import JSON') + '</button>' +
+          '<input id="import-input" type="file" accept="application/json,.json" hidden>' +
+          '</div>'
+        : '') +
+      '</div>' +
       '<div class="manage-list">' + rows + '</div>'
     );
+  }
+
+  function selectedSlugsList() {
+    return Object.keys(state.selectedSlugs);
+  }
+
+  function updateExportCount() {
+    var counter = document.getElementById('export-count');
+    if (counter) counter.textContent = String(selectedSlugsList().length);
+  }
+
+  async function exportPosts(slugs) {
+    try {
+      setStatus(L('正在导出…', 'Exporting…'));
+      var data = await request('/admin/export', {
+        method: 'POST',
+        auth: true,
+        body: slugs.length ? { slugs: slugs } : {}
+      });
+      var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      var url = URL.createObjectURL(blob);
+      var link = document.createElement('a');
+      var stamp = new Date().toISOString().slice(0, 10);
+      link.href = url;
+      link.download = 'az-presented-posts-' + (slugs.length ? 'selected-' : '') + stamp + '.json';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+      setStatus(L('已导出 ' + data.posts.length + ' 篇文章', 'Exported ' + data.posts.length + ' post(s)'));
+    } catch (e) {
+      if (!authError(e)) setStatus(e.message, 'error');
+    }
+  }
+
+  async function importPostsFile(file) {
+    var text;
+    try {
+      text = await file.text();
+    } catch (e) {
+      setStatus(L('无法读取文件', 'Cannot read the file'), 'error');
+      return;
+    }
+    var data;
+    try {
+      data = JSON.parse(text);
+    } catch (e) {
+      setStatus(L('JSON 格式无效', 'Invalid JSON'), 'error');
+      return;
+    }
+    var posts = Array.isArray(data) ? data : (data && Array.isArray(data.posts) ? data.posts : null);
+    if (!posts) {
+      setStatus(L('文件中没有 posts 数组', 'No posts array in the file'), 'error');
+      return;
+    }
+    if (!posts.length) {
+      setStatus(L('文件中没有文章', 'The file has no posts'), 'error');
+      return;
+    }
+    if (!confirm(L(
+      '导入 ' + posts.length + ' 篇文章？已存在的标识会自动跳过。',
+      'Import ' + posts.length + ' post(s)? Existing slugs will be skipped.'
+    ))) return;
+    try {
+      setStatus(L('正在导入…', 'Importing…'));
+      var result = await request('/admin/import', { method: 'POST', auth: true, body: { posts: posts } });
+      var message = L('已导入 ' + result.imported + ' 篇', 'Imported ' + result.imported);
+      if (result.skipped) message += L('，跳过 ' + result.skipped + ' 篇', ', skipped ' + result.skipped);
+      if (result.errors && result.errors.length) {
+        message += L('，失败 ' + result.errors.length + ' 篇（' + result.errors[0].error + '）',
+          ', failed ' + result.errors.length + ' (' + result.errors[0].error + ')');
+      }
+      setStatus(message, result.errors && result.errors.length ? 'error' : '');
+      await renderRoute();
+    } catch (e) {
+      if (!authError(e)) setStatus(e.message, 'error');
+    }
+  }
+
+  async function renameAuthor(from, to) {
+    try {
+      var data = await request('/authors/' + encodeURIComponent(from) + '/rename', {
+        method: 'POST',
+        auth: true,
+        body: { name: to }
+      });
+      if (state.draft.author === from) state.draft.author = data.name;
+      if (from === AI_AUTHOR) {
+        AI_AUTHOR = data.name;
+        try {
+          localStorage.setItem('abyss_default_author', data.name);
+        } catch (e) {
+          /* ignore */
+        }
+      }
+      state.adminPosts.forEach(function (post) {
+        if (post.author === from) post.author = data.name;
+      });
+      await loadTaxonomy(true);
+      setStatus(L('已把作者「' + from + '」改名为「' + data.name + '」',
+        'Renamed author "' + from + '" to "' + data.name + '"'));
+      await renderRoute();
+    } catch (e) {
+      if (!authError(e)) setStatus(e.message, 'error');
+    }
+  }
+
+  function formatBytes(bytes) {
+    var n = Number(bytes || 0);
+    if (n >= 1024 * 1024) return (n / 1024 / 1024).toFixed(1) + ' MB';
+    if (n >= 1024) return (n / 1024).toFixed(1) + ' KB';
+    return n + ' B';
+  }
+
+  function logRowHtml(entry) {
+    var status = Number(entry.status || 0);
+    var tone = status >= 500 ? ' is-error' : status >= 400 ? ' is-warn' : '';
+    var requestPath = String(entry.path || '') + (entry.query ? '?' + String(entry.query) : '');
+    return (
+      '<details class="log-row' + tone + '">' +
+      '<summary>' +
+      '<span class="log-status">' + esc(status) + '</span>' +
+      '<span class="log-path">' + esc(entry.method || '') + ' ' + esc(requestPath) + '</span>' +
+      '<span class="log-meta">' + esc(fmtDate(entry.time)) + ' · ' + esc(entry.duration_ms) + ' ms · ' +
+      esc(entry.ip || '') + (entry.user ? ' · ' + esc(entry.user) : '') + '</span>' +
+      '</summary>' +
+      '<pre class="log-json">' + esc(JSON.stringify(entry, null, 2)) + '</pre>' +
+      '</details>'
+    );
+  }
+
+  function logsHtml() {
+    var options = state.logsFiles.map(function (file) {
+      return '<option value="' + esc(file.name) + '"' + (file.name === state.logFile ? ' selected' : '') + '>' +
+        esc(file.name) + ' · ' + esc(formatBytes(file.size)) + '</option>';
+    }).join('');
+    var rows = state.logsEntries.length
+      ? state.logsEntries.map(logRowHtml).join('')
+      : '<div class="empty-state"><p class="empty-text">' + L('没有日志。', 'No log entries.') + '</p></div>';
+    return (
+      '<div class="manage-list-head"><h2 class="panel-title">' + L('日志', 'Logs') + '</h2>' +
+      '<span class="panel-note">' + state.logsEntries.length + '</span>' +
+      '<div class="manage-tools">' +
+      (options
+        ? '<select class="az-input log-file" data-log-file aria-label="' + L('日志文件', 'Log file') + '">' +
+          options + '</select>'
+        : '') +
+      '<label class="check"><input type="checkbox" data-log-errors' +
+      (state.logsErrorsOnly ? ' checked' : '') + '>' + L('只看错误', 'Errors only') + '</label>' +
+      '<button class="op" data-action="logs-refresh">' + L('刷新', 'Refresh') + '</button>' +
+      '</div></div>' +
+      '<div class="log-list">' + rows + '</div>'
+    );
+  }
+
+  async function loadLogs() {
+    var query = '?limit=200';
+    if (state.logFile) query += '&file=' + encodeURIComponent(state.logFile);
+    if (state.logsErrorsOnly) query += '&errors=1';
+    var data = await request('/admin/logs' + query, { auth: true });
+    state.logsFiles = data.files || [];
+    state.logFile = data.file || '';
+    state.logsEntries = data.entries || [];
+  }
+
+  /* ---------- AI: DeepSeek ---------- */
+
+  var aiModalEl = null;
+
+  function closeAiModal() {
+    if (aiModalEl) {
+      aiModalEl.remove();
+      aiModalEl = null;
+    }
+  }
+
+  function openAiSettings() {
+    closeAiModal();
+    var savedKey = readAiKey();
+    var wrap = document.createElement('div');
+    wrap.className = 'modal-backdrop';
+    wrap.innerHTML =
+      '<section class="panel glass token-modal ai-modal" role="dialog" aria-modal="true">' +
+      '<button class="token-close" data-ai-action="close" aria-label="' + L('关闭', 'Close') + '">X</button>' +
+      '<h2 class="panel-title">' + L('DeepSeek API', 'DeepSeek API') + '</h2>' +
+      '<p class="token-hint">' +
+      L(
+        'API Key 只保存在当前浏览器的 localStorage 中，调用时直接发送给 DeepSeek，不会上传到博客服务器。',
+        'The API key is stored only in this browser’s localStorage and sent directly to DeepSeek. It is never uploaded to the blog server.'
+      ) +
+      '</p>' +
+      '<label class="field"><span class="field-label">' + L('API Key', 'API key') + '</span>' +
+      '<input id="ai-key-input" class="az-input" type="password" autocomplete="off" spellcheck="false" ' +
+      'placeholder="sk-..." value="' + esc(savedKey) + '"></label>' +
+      '<p class="token-hint">' +
+      L(
+        '发布时如果标题或分类留空，会用 deepseek-chat 自动生成。',
+        'If the title or category is blank when publishing, deepseek-chat generates it automatically.'
+      ) +
+      '</p>' +
+      '<div class="token-actions">' +
+      '<button class="az-button" data-ai-action="save">' + L('保存', 'Save') + '</button>' +
+      '<button class="az-button" data-ai-action="clear">' + L('清除', 'Clear') + '</button>' +
+      '<button class="az-button" data-ai-action="close">' + L('关闭', 'Close') + '</button>' +
+      '</div></section>';
+    document.body.appendChild(wrap);
+    aiModalEl = wrap;
+    var input = wrap.querySelector('#ai-key-input');
+    if (input) {
+      input.focus();
+      input.select();
+    }
+    wrap.addEventListener('click', function (event) {
+      if (event.target === wrap) {
+        closeAiModal();
+        return;
+      }
+      var button = event.target.closest('[data-ai-action]');
+      if (!button) return;
+      var action = button.dataset.aiAction;
+      if (action === 'close') {
+        closeAiModal();
+      } else if (action === 'save') {
+        var value = input ? input.value.trim() : '';
+        writeAiKey(value);
+        closeAiModal();
+        setStatus(value
+          ? L('DeepSeek API Key 已保存在本地', 'DeepSeek API key saved locally')
+          : L('已清除 DeepSeek API Key', 'DeepSeek API key cleared'));
+      } else if (action === 'clear') {
+        writeAiKey('');
+        if (input) {
+          input.value = '';
+          input.focus();
+        }
+        setStatus(L('已清除 DeepSeek API Key', 'DeepSeek API key cleared'));
+      }
+    });
+    if (input) {
+      input.addEventListener('keydown', function (event) {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        var save = wrap.querySelector('[data-ai-action="save"]');
+        if (save) save.click();
+      });
+    }
+  }
+
+  function parseAiJson(text) {
+    var raw = String(text || '').trim();
+    var start = raw.indexOf('{');
+    var end = raw.lastIndexOf('}');
+    if (start === -1 || end <= start) return {};
+    try {
+      return JSON.parse(raw.slice(start, end + 1));
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function trimGenerated(value, max) {
+    return String(value || '')
+      .trim()
+      .replace(/^["'“”「」《》]+|["'“”「」《》]+$/g, '')
+      .slice(0, max);
+  }
+
+  async function generateWithDeepSeek(needTitle, needCategory) {
+    var d = state.draft;
+    var categories = state.categories.map(function (c) { return c.name; });
+    var isAdmin = state.role === 'admin';
+    var categoryRule;
+    if (isAdmin) {
+      categoryRule = categories.length
+        ? '优先从这些已有分类中选择：' + categories.join('、') + '。都不合适时可以创建一个 2-8 字的新分类。'
+        : '创建一个 2-8 字的新分类。';
+    } else {
+      categoryRule = '分类必须从这些已有分类中选择：' + (categories.join('、') || '（无）') + '。';
+    }
+
+    var system = [
+      '你是中文博客编辑。阅读文章正文，生成简洁准确的标题和分类。',
+      '标题不超过 30 个汉字，不要使用引号、书名号，也不要带句末标点。',
+      categoryRule,
+      '只输出 json，格式为 {"title":"标题","category":"分类"}，不要输出解释或 Markdown。'
+    ].join('\n');
+
+    var parts = [];
+    if (needTitle) parts.push('请生成标题。');
+    if (needCategory) parts.push('请生成分类。');
+    if (d.title.trim()) parts.push('当前标题：' + d.title.trim());
+    parts.push('正文：\n' + String(d.content || '').slice(0, 6000));
+
+    var response;
+    try {
+      response = await fetch(DEEPSEEK_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + readAiKey()
+        },
+        body: JSON.stringify({
+          model: DEEPSEEK_MODEL,
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user', content: parts.join('\n\n') }
+          ],
+          response_format: { type: 'json_object' },
+          temperature: 0.6,
+          max_tokens: 300,
+          stream: false
+        })
+      });
+    } catch (e) {
+      throw new Error(L(
+        '无法连接 DeepSeek，请检查网络或 API Key',
+        'Cannot reach DeepSeek. Check your network or API key.'
+      ));
+    }
+
+    var text = await response.text();
+    var data = {};
+    try {
+      data = JSON.parse(text);
+    } catch (e) {
+      data = {};
+    }
+    if (!response.ok) {
+      var detail = data && data.error && data.error.message ? String(data.error.message) : '';
+      if (response.status === 401) {
+        throw new Error(L('DeepSeek API Key 无效', 'DeepSeek API key is invalid'));
+      }
+      if (response.status === 402) {
+        throw new Error(L('DeepSeek 账户余额不足', 'DeepSeek account has insufficient balance'));
+      }
+      if (response.status === 429) {
+        throw new Error(L('DeepSeek 请求过于频繁，请稍后再试', 'Too many DeepSeek requests. Try again later.'));
+      }
+      throw new Error(L(
+        'DeepSeek 请求失败（' + response.status + '）' + (detail ? '：' + detail : ''),
+        'DeepSeek request failed (' + response.status + ')' + (detail ? ': ' + detail : '')
+      ));
+    }
+
+    var content = data && data.choices && data.choices[0] && data.choices[0].message
+      ? String(data.choices[0].message.content || '')
+      : '';
+    var parsed = parseAiJson(content);
+    var title = trimGenerated(parsed.title, 200);
+    var category = trimGenerated(parsed.category, 60);
+
+    if (needTitle && !title) {
+      throw new Error(L(
+        'AI 未能生成标题，请手动填写后重试',
+        'AI could not generate a title. Enter one manually and try again.'
+      ));
+    }
+    if (needCategory && !category) category = categories[0] || '未分类';
+    if (!isAdmin && needCategory && categories.indexOf(category) === -1) {
+      category = categories[0] || '未分类';
+    }
+    return { title: title, category: category };
   }
 
   /* ---------- admin actions ---------- */
@@ -1094,29 +1555,68 @@
   function updatePublishButton() {
     var btn = document.querySelector('.publish-button');
     if (!btn) return;
-    btn.disabled = state.saving || state.editingDeleted;
-    btn.textContent = state.saving
-      ? L('保存中…', 'Saving…')
-      : state.editingDeleted
-        ? L('文章在回收站', 'In trash')
-        : state.editingSlug
-          ? L('保存修改', 'Save changes')
-          : L('发布文章', 'Publish post');
+    btn.disabled = state.saving || state.aiBusy || state.editingDeleted;
+    btn.textContent = state.aiBusy
+      ? L('AI 生成中…', 'Generating…')
+      : state.saving
+        ? L('保存中…', 'Saving…')
+        : state.editingDeleted
+          ? L('文章在回收站', 'In trash')
+          : state.editingSlug
+            ? L('保存修改', 'Save changes')
+            : L('发布文章', 'Publish post');
   }
 
   async function savePost() {
-    if (state.saving) return;
+    if (state.saving || state.aiBusy) return;
     var d = state.draft;
-    if (!d.title.trim()) {
-      setStatus(L('标题不能为空', 'Title is required'), 'error');
-      var titleInput = document.querySelector('[data-field="title"]');
-      if (titleInput) titleInput.focus();
-      return;
-    }
     if (!d.content.trim()) {
       setStatus(L('正文不能为空', 'Body is required'), 'error');
       var contentInput = document.getElementById('content-editor');
       if (contentInput) contentInput.focus();
+      return;
+    }
+
+    var needTitle = !d.title.trim();
+    var needCategory = state.isAdmin && !d.category.trim();
+    if (state.isAdmin && (needTitle || needCategory)) {
+      if (!readAiKey()) {
+        setStatus(L(
+          '标题或分类为空时需要 AI 生成，请先在「AI 设置」中填写 DeepSeek API Key',
+          'A blank title or category is generated by AI. Set your DeepSeek API key in AI settings first.'
+        ), 'error');
+        openAiSettings();
+        return;
+      }
+      state.aiBusy = true;
+      updatePublishButton();
+      setStatus(L('正在用 DeepSeek 生成标题与分类…', 'Generating title and category with DeepSeek…'));
+      try {
+        var generated = await generateWithDeepSeek(needTitle, needCategory);
+        if (needTitle) {
+          d.title = generated.title;
+          var titleInput = document.querySelector('[data-field="title"]');
+          if (titleInput) titleInput.value = generated.title;
+        }
+        if (needCategory) {
+          d.category = generated.category;
+          var categoryInput = document.querySelector('[data-field="category"]');
+          if (categoryInput) categoryInput.value = generated.category;
+        }
+      } catch (e) {
+        state.aiBusy = false;
+        updatePublishButton();
+        setStatus(e.message, 'error');
+        return;
+      }
+      state.aiBusy = false;
+      updatePublishButton();
+    }
+
+    if (!d.title.trim()) {
+      setStatus(L('标题不能为空', 'Title is required'), 'error');
+      var emptyTitleInput = document.querySelector('[data-field="title"]');
+      if (emptyTitleInput) emptyTitleInput.focus();
       return;
     }
     var payload = {
@@ -1441,6 +1941,85 @@
     textarea.focus();
   }
 
+  function insertTextIntoEditor(text, anchor) {
+    var textarea = document.getElementById('content-editor');
+    if (!textarea) return;
+    var start = anchor ? anchor.start : textarea.selectionStart;
+    var end = anchor ? anchor.end : textarea.selectionEnd;
+    var value = textarea.value;
+    var before = value.slice(0, start);
+    var after = value.slice(end);
+    var prefix = before && !/\n\s*$/.test(before) ? '\n\n' : '';
+    var suffix = after && !/^\s*\n/.test(after) ? '\n\n' : '';
+    var insert = prefix + text + suffix;
+    textarea.value = before + insert + after;
+    var caret = start + insert.length;
+    textarea.setSelectionRange(caret, caret);
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    textarea.focus();
+  }
+
+  async function uploadImageFile(file) {
+    var headers = { 'Content-Type': file.type || 'application/octet-stream' };
+    if (state.token) headers.Authorization = 'Bearer ' + state.token;
+    var response;
+    try {
+      response = await fetch(API + '/uploads', {
+        method: 'POST',
+        headers: headers,
+        body: file,
+        cache: 'no-store'
+      });
+    } catch (e) {
+      throw new ApiError(0, L('无法连接服务器，请检查网络', 'Cannot reach the server. Check your connection.'));
+    }
+    var text = await response.text();
+    var data = {};
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        data = {};
+      }
+    }
+    if (!response.ok) {
+      throw new ApiError(response.status, translateServerError(data.error) ||
+        L('图片上传失败（' + response.status + '）', 'Image upload failed (' + response.status + ')'));
+    }
+    return data;
+  }
+
+  async function uploadImages(files, anchor) {
+    var list = Array.prototype.slice.call(files || []);
+    if (!list.length) return;
+    if (!state.token) {
+      setStatus(L('请先登录再上传图片', 'Sign in before uploading images'), 'error');
+      return;
+    }
+    var markdown = [];
+    for (var i = 0; i < list.length; i++) {
+      var file = list[i];
+      var isImage = file.type
+        ? /^image\/(png|jpe?g|gif|webp)$/.test(file.type)
+        : /\.(png|jpe?g|gif|webp)$/i.test(file.name || '');
+      if (!isImage) {
+        setStatus(L('仅支持 PNG、JPEG、GIF、WebP 图片', 'Only PNG, JPEG, GIF and WebP images are supported'), 'error');
+        return;
+      }
+      if (file.size > MAX_IMAGE_BYTES) {
+        setStatus(L('单张图片不能超过 10MB', 'Each image must be 10MB or smaller'), 'error');
+        return;
+      }
+      setStatus(L('图片上传中…（' + (i + 1) + '/' + list.length + '）',
+        'Uploading image ' + (i + 1) + '/' + list.length + '…'));
+      var data = await uploadImageFile(file);
+      var alt = String(file.name || 'image').replace(/\.[^.]+$/, '').replace(/[[\]]/g, '').trim() || 'image';
+      markdown.push('![' + alt + '](' + API + '/uploads/' + data.name + ')');
+    }
+    insertTextIntoEditor(markdown.join('\n'), anchor);
+    setStatus(L('已插入 ' + markdown.length + ' 张图片', 'Inserted ' + markdown.length + ' image(s)'));
+  }
+
   function updateCharCount() {
     var counter = document.getElementById('char-count');
     if (counter) {
@@ -1501,11 +2080,48 @@
       case 'new-post':
         startNewPost();
         break;
+      case 'ai-settings':
+        openAiSettings();
+        break;
       case 'admin-manage':
         state.adminTab = 'manage';
         if (state.route && state.route.edit) location.hash = '#/admin';
         else renderRoute();
         break;
+      case 'admin-logs':
+        if (!state.isAdmin) break;
+        state.adminTab = 'logs';
+        renderRoute();
+        break;
+      case 'logs-refresh':
+        renderRoute();
+        break;
+      case 'export-all':
+        exportPosts([]);
+        break;
+      case 'export-selected': {
+        var slugs = selectedSlugsList();
+        if (!slugs.length) {
+          setStatus(L('请先选择要导出的文章', 'Select posts to export first'), 'error');
+          break;
+        }
+        exportPosts(slugs);
+        break;
+      }
+      case 'import-posts': {
+        var importInput = document.getElementById('import-input');
+        if (importInput) importInput.click();
+        break;
+      }
+      case 'rename-author': {
+        var authorFrom = target.dataset.name || '';
+        var authorTo = window.prompt(L('新的作者名', 'New author name'), authorFrom);
+        if (authorTo === null) break;
+        authorTo = authorTo.trim();
+        if (!authorTo || authorTo === authorFrom) break;
+        renameAuthor(authorFrom, authorTo);
+        break;
+      }
       case 'clear-draft':
         if (confirm(L('清空当前草稿？', 'Clear the current draft?'))) {
           startNewDraft();
@@ -1521,6 +2137,18 @@
       case 'md-insert':
         insertMarkdown(target.dataset.kind);
         break;
+      case 'md-image': {
+        var editor = document.getElementById('content-editor');
+        var picker = document.getElementById('image-input');
+        if (!editor || !picker) break;
+        if (!state.token) {
+          setStatus(L('请先登录再上传图片', 'Sign in before uploading images'), 'error');
+          break;
+        }
+        imageAnchor = { start: editor.selectionStart, end: editor.selectionEnd };
+        picker.click();
+        break;
+      }
       case 'view-version':
         viewVersion(Number(target.dataset.version));
         break;
@@ -1570,6 +2198,93 @@
       updateCharCount();
       if (state.previewMode) schedulePreview();
     }
+  });
+
+  function reportUploadError(err) {
+    setStatus((err && err.message) || L('图片上传失败', 'Image upload failed'), 'error');
+  }
+
+  view.addEventListener('change', function (event) {
+    var target = event.target;
+    if (!target) return;
+
+    if (target.id === 'image-input') {
+      var files = Array.prototype.slice.call(target.files || []);
+      var anchor = imageAnchor;
+      imageAnchor = null;
+      target.value = '';
+      uploadImages(files, anchor).catch(reportUploadError);
+      return;
+    }
+
+    if (target.id === 'import-input') {
+      var importFile = target.files && target.files[0];
+      target.value = '';
+      if (importFile) importPostsFile(importFile);
+      return;
+    }
+
+    if (target.dataset && target.dataset.selectAll !== undefined) {
+      if (target.checked) {
+        state.adminPosts.forEach(function (post) {
+          if (!post.deleted) state.selectedSlugs[post.slug] = true;
+        });
+      } else {
+        state.selectedSlugs = {};
+      }
+      Array.prototype.forEach.call(document.querySelectorAll('[data-select-slug]'), function (input) {
+        input.checked = Boolean(state.selectedSlugs[input.dataset.selectSlug]);
+      });
+      updateExportCount();
+      return;
+    }
+
+    if (target.dataset && target.dataset.selectSlug) {
+      if (target.checked) state.selectedSlugs[target.dataset.selectSlug] = true;
+      else delete state.selectedSlugs[target.dataset.selectSlug];
+      updateExportCount();
+      return;
+    }
+
+    if (target.dataset && target.dataset.logFile !== undefined) {
+      state.logFile = target.value;
+      renderRoute();
+      return;
+    }
+
+    if (target.dataset && target.dataset.logErrors !== undefined) {
+      state.logsErrorsOnly = Boolean(target.checked);
+      renderRoute();
+    }
+  });
+
+  view.addEventListener('paste', function (event) {
+    var target = event.target;
+    if (!target || target.id !== 'content-editor' || !event.clipboardData) return;
+    var items = event.clipboardData.items || [];
+    var files = [];
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].kind !== 'file' || !/^image\//.test(items[i].type)) continue;
+      var file = items[i].getAsFile();
+      if (file) files.push(file);
+    }
+    if (!files.length) return;
+    event.preventDefault();
+    uploadImages(files, null).catch(reportUploadError);
+  });
+
+  view.addEventListener('dragover', function (event) {
+    if (event.target && event.target.id === 'content-editor') event.preventDefault();
+  });
+
+  view.addEventListener('drop', function (event) {
+    var target = event.target;
+    if (!target || target.id !== 'content-editor' || !event.dataTransfer) return;
+    var files = Array.prototype.slice.call(event.dataTransfer.files || [])
+      .filter(function (file) { return /^image\//.test(file.type); });
+    if (!files.length) return;
+    event.preventDefault();
+    uploadImages(files, null).catch(reportUploadError);
   });
 
   view.addEventListener('keydown', function (event) {
@@ -1627,7 +2342,10 @@
   window.addEventListener('hashchange', renderRoute);
 
   document.addEventListener('keydown', function (event) {
-    if (event.key === 'Escape') closeTokenModal();
+    if (event.key === 'Escape') {
+      closeTokenModal();
+      closeAiModal();
+    }
   });
 
   async function init() {
