@@ -14,6 +14,7 @@
   var RENDERER = String(cfg.rendererBase).replace(/\/+$/, '');
   var TOKEN_KEY = 'abyss_admin_token';
   var LANG_KEY = 'abyss_lang';
+  var THEME_KEY = 'abyss_theme';
   var AI_KEY_STORE = 'abyss_deepseek_key';
   var DEEPSEEK_URL = 'https://api.deepseek.com/chat/completions';
   var DEEPSEEK_MODEL = 'deepseek-chat';
@@ -31,6 +32,7 @@
   var searchInput = document.getElementById('search-input');
   var navAdmin = document.getElementById('nav-admin');
   var langToggle = document.getElementById('lang-toggle');
+  var themeToggle = document.getElementById('theme-toggle');
 
   function readLang() {
     try {
@@ -46,6 +48,65 @@
 
   function L(zh, en) {
     return lang === 'en' ? en : zh;
+  }
+
+  function readTheme() {
+    try {
+      var saved = localStorage.getItem(THEME_KEY);
+      if (saved === 'dark' || saved === 'light') return saved;
+    } catch (e) {
+      /* ignore */
+    }
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+      ? 'dark'
+      : 'light';
+  }
+
+  function currentTheme() {
+    return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+  }
+
+  function updateThemeToggle() {
+    if (!themeToggle) return;
+    var dark = currentTheme() === 'dark';
+    themeToggle.textContent = dark ? L('浅色', 'Light') : L('深色', 'Dark');
+    themeToggle.setAttribute('aria-label', dark
+      ? L('切换到浅色模式', 'Switch to light mode')
+      : L('切换到深色模式', 'Switch to dark mode'));
+  }
+
+  function themedRendererUrl(url) {
+    var theme = currentTheme();
+    if (/[#&]theme=/.test(url)) return url.replace(/([#&])theme=[^&]*/, '$1theme=' + theme);
+    return url + (url.indexOf('#') >= 0 ? '&' : '#') + 'theme=' + theme;
+  }
+
+  function applyThemeToFrames() {
+    var frames = document.querySelectorAll('iframe.reader-frame');
+    for (var i = 0; i < frames.length; i += 1) {
+      frames[i].src = themedRendererUrl(frames[i].src);
+    }
+  }
+
+  function applyTheme(theme, persist) {
+    var next = theme === 'dark' ? 'dark' : 'light';
+    var changed = currentTheme() !== next;
+    document.documentElement.setAttribute('data-theme', next);
+    var meta = document.getElementById('theme-color');
+    if (meta) meta.setAttribute('content', next === 'dark' ? '#171315' : '#ffffff');
+    if (persist) {
+      try {
+        localStorage.setItem(THEME_KEY, next);
+      } catch (e) {
+        /* ignore */
+      }
+    }
+    updateThemeToggle();
+    if (changed) applyThemeToFrames();
+  }
+
+  function setTheme(next) {
+    applyTheme(next, true);
   }
 
   var SERVER_ERRORS = {
@@ -140,6 +201,7 @@
     }
     langToggle.textContent = L('EN', '中');
     langToggle.setAttribute('aria-label', L('切换到英文', 'Switch to Chinese'));
+    updateThemeToggle();
   }
 
   function ApiError(status, message) {
@@ -309,7 +371,7 @@
   }
 
   function rendererUrlFromMarkdown(markdown) {
-    return RENDERER + '#md=' + encodeURIComponent(String(markdown || ''));
+    return themedRendererUrl(RENDERER + '#md=' + encodeURIComponent(String(markdown || '')));
   }
 
   function displayMarkdown(post) {
@@ -327,7 +389,7 @@
 
   function rendererUrlForPost(post) {
     if (/^https:\/\//i.test(API)) {
-      return RENDERER + '#src=' + encodeURIComponent(rawUrlForPost(post, true));
+      return themedRendererUrl(RENDERER + '#src=' + encodeURIComponent(rawUrlForPost(post, true)));
     }
     return rendererUrlFromMarkdown(displayMarkdown(post));
   }
@@ -2417,6 +2479,29 @@
     setLang(lang === 'en' ? 'zh' : 'en');
   });
 
+  if (themeToggle) {
+    themeToggle.addEventListener('click', function () {
+      setTheme(currentTheme() === 'dark' ? 'light' : 'dark');
+    });
+  }
+
+  if (window.matchMedia) {
+    var schemeQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    var followSystemTheme = function () {
+      var saved = '';
+      try {
+        saved = localStorage.getItem(THEME_KEY) || '';
+      } catch (e) {
+        /* ignore */
+      }
+      if (saved !== 'dark' && saved !== 'light') {
+        applyTheme(schemeQuery.matches ? 'dark' : 'light', false);
+      }
+    };
+    if (schemeQuery.addEventListener) schemeQuery.addEventListener('change', followSystemTheme);
+    else if (schemeQuery.addListener) schemeQuery.addListener(followSystemTheme);
+  }
+
   if (searchInput) {
     searchInput.addEventListener('input', function () {
       state.query = searchInput.value.trim();
@@ -2439,6 +2524,7 @@
 
   async function init() {
     if (PAGE === 'public') state.token = '';
+    applyTheme(readTheme(), false);
     applyStaticLang();
     if (searchInput) searchInput.value = state.query;
     if (PAGE === 'admin' && state.token) await verifyToken();
