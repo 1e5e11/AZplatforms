@@ -8,10 +8,15 @@
   <script>
     (() => {
       const root = document.documentElement;
-      let theme = '';
-      try { theme = localStorage.getItem('moye-theme') || ''; } catch { /* Storage may be unavailable. */ }
+      const query = new URLSearchParams(location.search);
+      const fragment = new URLSearchParams(location.hash.slice(1));
+      const paramTheme = (fragment.get('theme') || query.get('theme') || '').toLowerCase();
+      let theme = paramTheme === 'dark' || paramTheme === 'light' ? paramTheme : '';
+      if (!theme) {
+        try { theme = localStorage.getItem('moye-theme') || ''; } catch { /* Storage may be unavailable. */ }
+      }
       root.dataset.theme = theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-      if (['md','src'].some(key => new URLSearchParams(location.search).has(key) || new URLSearchParams(location.hash.slice(1)).has(key))) root.classList.add('reader');
+      if (['md','src'].some(key => query.has(key) || fragment.has(key))) root.classList.add('reader');
     })();
   </script>
   <link rel="stylesheet" href="vendor/katex.min.css">
