@@ -58,6 +58,17 @@
     '图片不存在': 'Image not found',
     '导入数据格式无效': 'Invalid import data',
     '数据格式无效': 'Invalid data format',
+    '压缩包过大': 'Archive is too large',
+    '压缩包格式无效': 'Invalid archive',
+    '压缩包数据不完整': 'Incomplete archive',
+    '压缩包中缺少 posts.json': 'The archive has no posts.json',
+    'posts.json 格式无效': 'Invalid posts.json',
+    '压缩包解压失败': 'Cannot unpack the archive',
+    '不支持的压缩方式': 'Unsupported compression method',
+    '压缩包解压后过大': 'Archive contents are too large',
+    '压缩包文件过多': 'Too many files in the archive',
+    '不支持加密的压缩包': 'Encrypted archives are not supported',
+    '不支持 ZIP64 压缩包': 'ZIP64 archives are not supported',
     'JSON 格式无效': 'Invalid JSON',
     '请求体长度无效': 'Invalid request length',
     '接口不存在': 'Endpoint not found',
@@ -1156,7 +1167,9 @@
               '<div class="manage-title">' + esc(post.title) + postBadges(post) +
               (post.deleted ? '<span class="badge">' + L('回收站', 'Trash') + '</span>' : '') + '</div>' +
               '<div class="manage-meta">' + esc(fmtDate(post.created_at)) + ' · ' + esc(post.author) + ' · ' +
-              esc(post.category) + ' · ' + L('更新 ', 'updated ') + esc(fmtShort(post.updated_at)) + '</div>' +
+              esc(post.category) + ' · ' + L(Number(post.views || 0) + ' 次浏览',
+                Number(post.views || 0) + ' views') + ' · ' +
+              L('更新 ', 'updated ') + esc(fmtShort(post.updated_at)) + '</div>' +
               '</div>' +
               '<div class="manage-ops">' + ops + '</div>' +
               '</div>'
@@ -1179,8 +1192,8 @@
           '<button class="op" data-action="export-selected">' + L('导出选中', 'Export selected') +
           ' (<span id="export-count">' + selectedCount + '</span>)</button>' +
           '<button class="op" data-action="export-all">' + L('导出全部', 'Export all') + '</button>' +
-          '<button class="op" data-action="import-posts">' + L('导入 JSON', 'Import JSON') + '</button>' +
-          '<input id="import-input" type="file" accept="application/json,.json" hidden>' +
+          '<button class="op" data-action="import-posts">' + L('导入', 'Import') + '</button>' +
+          '<input id="import-input" type="file" accept="application/json,.json,application/zip,.zip" hidden>' +
           '</div>'
         : '') +
       '</div>' +
@@ -1200,28 +1213,104 @@
   async function exportPosts(slugs) {
     try {
       setStatus(L('正在导出…', 'Exporting…'));
-      var data = await request('/admin/export', {
-        method: 'POST',
-        auth: true,
-        body: slugs.length ? { slugs: slugs } : {}
-      });
-      var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      var headers = { 'Content-Type': 'application/json' };
+      if (state.token) headers.Authorization = 'Bearer ' + state.token;
+      var response;
+      try {
+        response = await fetch(API + '/admin/export', {
+          method: 'POST',
+          headers: headers,
+          body: JSON.stringify({ format: 'zip', slugs: slugs }),
+          cache: 'no-store'
+        });
+      } catch (e) {
+        throw new ApiError(0, L('无法连接服务器，请检查网络', 'Cannot reach the server. Check your connection.'));
+      }
+      if (!response.ok) {
+        var text = await response.text();
+        var error = {};
+        if (text) {
+          try {
+            error = JSON.parse(text);
+          } catch (e) {
+            error = {};
+          }
+        }
+        throw new ApiError(response.status, translateServerError(error.error) ||
+          L('导出失败（' + response.status + '）', 'Export failed (' + response.status + ')'));
+      }
+      var posts = Number(response.headers.get('X-Export-Posts') || 0);
+      var images = Number(response.headers.get('X-Export-Images') || 0);
+      var blob = await response.blob();
       var url = URL.createObjectURL(blob);
       var link = document.createElement('a');
       var stamp = new Date().toISOString().slice(0, 10);
       link.href = url;
-      link.download = 'az-presented-posts-' + (slugs.length ? 'selected-' : '') + stamp + '.json';
+      link.download = 'az-presented-posts-' + (slugs.length ? 'selected-' : '') + stamp + '.zip';
       document.body.appendChild(link);
       link.click();
       link.remove();
       setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
-      setStatus(L('已导出 ' + data.posts.length + ' 篇文章', 'Exported ' + data.posts.length + ' post(s)'));
+      setStatus(L('已导出 ' + posts + ' 篇文章、' + images + ' 张图片',
+        'Exported ' + posts + ' post(s) and ' + images + ' image(s)'));
+    } catch (e) {
+      if (!authError(e)) setStatus(e.message, 'error');
+    }
+  }
+
+  async function importArchiveFile(file) {
+    if (!confirm(L(
+      '导入这个压缩包？其中的文章和图片会被恢复，已存在的标识会自动跳过。',
+      'Import this archive? Its posts and images will be restored; existing slugs are skipped.'
+    ))) return;
+    try {
+      setStatus(L('正在导入…', 'Importing…'));
+      var buffer = await file.arrayBuffer();
+      var headers = { 'Content-Type': 'application/zip' };
+      if (state.token) headers.Authorization = 'Bearer ' + state.token;
+      var response;
+      try {
+        response = await fetch(API + '/admin/import-archive', {
+          method: 'POST',
+          headers: headers,
+          body: buffer,
+          cache: 'no-store'
+        });
+      } catch (e) {
+        throw new ApiError(0, L('无法连接服务器，请检查网络', 'Cannot reach the server. Check your connection.'));
+      }
+      var text = await response.text();
+      var data = {};
+      if (text) {
+        try {
+          data = JSON.parse(text);
+        } catch (e) {
+          data = {};
+        }
+      }
+      if (!response.ok) {
+        throw new ApiError(response.status, translateServerError(data.error) ||
+          L('导入失败（' + response.status + '）', 'Import failed (' + response.status + ')'));
+      }
+      var message = L('已导入 ' + data.imported + ' 篇', 'Imported ' + data.imported);
+      if (data.images) message += L('、恢复 ' + data.images + ' 张图片', ' and ' + data.images + ' image(s)');
+      if (data.skipped) message += L('，跳过 ' + data.skipped + ' 篇', ', skipped ' + data.skipped);
+      if (data.errors && data.errors.length) {
+        message += L('，失败 ' + data.errors.length + ' 篇（' + data.errors[0].error + '）',
+          ', failed ' + data.errors.length + ' (' + data.errors[0].error + ')');
+      }
+      setStatus(message, data.errors && data.errors.length ? 'error' : '');
+      await renderRoute();
     } catch (e) {
       if (!authError(e)) setStatus(e.message, 'error');
     }
   }
 
   async function importPostsFile(file) {
+    if (/\.zip$/i.test(String(file.name || '')) || /zip/i.test(String(file.type || ''))) {
+      await importArchiveFile(file);
+      return;
+    }
     var text;
     try {
       text = await file.text();
