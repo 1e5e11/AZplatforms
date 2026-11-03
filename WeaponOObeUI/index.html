@@ -7,14 +7,14 @@
   <title>WEAPON OOBE UI</title>
 
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css" crossorigin="anonymous" />
-  <link rel="stylesheet" href="./md-renderer.css?v=2026-11-03-7" />
-  <link rel="stylesheet" href="./app.css?v=2026-11-03-7" />
+  <link rel="stylesheet" href="./md-renderer.css?v=2026-11-03-15" />
+  <link rel="stylesheet" href="./app.css?v=2026-11-03-15" />
   <script defer src="https://cdn.jsdelivr.net/npm/marked@15.0.7/lib/marked.umd.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/dompurify@3.2.6/dist/purify.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.11.1/build/highlight.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js" crossorigin="anonymous"></script>
-  <script defer src="./md-renderer.js?v=2026-11-03-7"></script>
-  <script defer src="./app.js?v=2026-11-03-7"></script>
+  <script defer src="./md-renderer.js?v=2026-11-03-15"></script>
+  <script defer src="./app.js?v=2026-11-03-15"></script>
 
 </head>
 <body>
@@ -38,8 +38,8 @@
     </div>
     <div id="quickPanel" class="quick-panel" aria-hidden="true">
       <div class="quick-actions">
-        <button id="showSidebarBtn" class="az-button" type="button" aria-controls="historyPanel" aria-expanded="false">Show sidebar</button>
         <button id="menuNewChatBtn" class="az-button" type="button">New chat</button>
+        <button id="manageHistoryBtnTop" class="az-button" type="button">Manage history</button>
         <button id="settingsBtn" class="az-button" type="button">Settings</button>
         <button id="themeBtn" class="az-button" type="button">Dark</button>
         <button id="exportMarkdownBtn" class="az-button" type="button">Export Markdown</button>
@@ -90,6 +90,8 @@
     </div>
   </section>
 
+  <button id="expandSidebarBtn" class="az-button expand-sidebar" type="button" aria-controls="historyPanel" aria-expanded="false" aria-label="展开侧栏" title="展开侧栏">›</button>
+
   <main class="chat-panel">
     <div class="messages" id="messages"></div>
     <div id="dropOverlay" class="drop-overlay">Drop files or images here</div>
@@ -110,7 +112,7 @@
   </main>
 
   <aside id="historyPanel" class="az-panel history-panel">
-    <div class="sidebar-brand"><span class="sidebar-brand-name">WEAPON <small>OOBE UI</small></span><button id="toggleSidebarBtn" class="az-button sidebar-collapse" type="button" aria-controls="historyPanel" aria-expanded="true" aria-label="收起侧栏">‹</button></div>
+    <div class="sidebar-brand"><span class="sidebar-brand-name">WEAPON <small>OOBE UI</small></span><button id="manageHistoryBtn" class="az-button sidebar-manage" type="button">Manage</button><button id="toggleSidebarBtn" class="az-button sidebar-collapse" type="button" aria-controls="historyPanel" aria-expanded="true" aria-label="收起侧栏">‹</button></div>
     <button id="newChatBtn" class="az-button sidebar-new">New</button>
     <div class="panel-title" id="historyPanelTitle">History</div>
     <input id="importFile" type="file" accept="application/json" hidden />
@@ -132,6 +134,27 @@
   <div id="sidebarResizeHandle" class="sidebar-resizer" role="separator" aria-orientation="vertical" aria-label="调整侧栏宽度" aria-valuemin="210" aria-valuemax="420" aria-valuenow="256" tabindex="0"></div>
 
   <div id="bottomStatus" class="bottom-status">Ready · conversations stay in this browser</div>
+
+  <section id="historyManagerModal" class="az-panel modal history-manager" aria-modal="true" role="dialog" aria-labelledby="historyManagerTitle">
+    <button id="historyManagerClose" class="modal-close" aria-label="close">X</button>
+    <div class="modal-title" id="historyManagerTitle">Chat history</div>
+    <div class="history-manager-toolbar">
+      <input id="historyManagerSearch" class="az-input" placeholder="search chats" aria-label="search chats" />
+      <label class="history-select-all">
+        <input id="historySelectAll" type="checkbox" />
+        <span id="historySelectAllLabel">Select all</span>
+      </label>
+      <span id="historySelectedCount" class="history-selected-count">0 selected</span>
+    </div>
+    <div id="historyManagerList" class="history-manager-list"></div>
+    <div class="modal-actions history-manager-actions">
+      <button id="historyManagerImportBtn" class="az-button" type="button">Import</button>
+      <button id="historyManagerExportJsonBtn" class="az-button" type="button">Export selected JSON</button>
+      <button id="historyManagerExportMdBtn" class="az-button" type="button">Export selected Markdown</button>
+      <button id="historyManagerDeleteBtn" class="az-button danger" type="button">Delete selected</button>
+      <button id="historyManagerCloseBtn" class="az-button" type="button">Close</button>
+    </div>
+  </section>
 
   <section id="settingsModal" class="az-panel modal" aria-modal="true" role="dialog">
     <button id="settingsClose" class="modal-close" aria-label="close">X</button>

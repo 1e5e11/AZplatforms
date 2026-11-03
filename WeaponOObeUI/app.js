@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const BUILD = '2026-11-03-pollinations-7';
+  const BUILD = '2026-11-03-history-6';
   const POLLINATIONS_ENDPOINT = 'https://text.pollinations.ai/openai';
   const KEYLESSAI_ENDPOINT = 'https://keylessai.thryx.workers.dev/v1/chat/completions';
   const PROVIDER_PRESETS = {
@@ -12,7 +12,7 @@
     glm: { name:'智谱 GLM', endpoint:'https://open.bigmodel.cn/api/paas/v4/chat/completions', model:'glm-4.5-flash' },
     kimi: { name:'Moonshot Kimi', endpoint:'https://api.moonshot.cn/v1/chat/completions', model:'kimi-k3' },
     siliconflow: { name:'硅基流动', endpoint:'https://api.siliconflow.cn/v1/chat/completions', model:'deepseek-ai/DeepSeek-V4-Flash' },
-    azai: { name:'AZAI（啊这一号）', endpoint:'https://ai.realgeneral.eu.org/v1/chat/completions', model:'AZ I' },
+    azai: { name:'AZAI（啊这AI）', endpoint:'https://ai.realgeneral.eu.org/v1/chat/completions', model:'AZ I' },
     custom: { name:'Custom API', endpoint:'', model:'custom-model' }
   };
   const LOCAL_PROXY_DEFAULT = 'http://127.0.0.1:8787/api/proxy';
@@ -50,6 +50,7 @@
       apiKeyButton: 'API / Key', refreshModels: '刷新模型', dark: '深色', light: '浅色', more: '更多',
       rename: '重命名', export: '导出', send: '发送', stop: '停止', clearInput: '清空输入',
       copyMessage: '复制消息', copied: '已复制', copyFailed: '复制失败',
+      retryMessage: '重来', retryConfirm: '从这里重来？此后的消息会被删除。', retryNoUser: '这条回复前没有用户消息，无法重来。', retryBusy: '正在生成，请先停止。',
       attach: '附件', composerHint: 'Enter 发送 · Shift+Enter 换行 · 可粘贴 / 拖入文件',
       attachmentEmpty: '可粘贴、选择或拖入文件 / 图片',
       dropHere: '把文件或图片拖到这里', import: '导入', session: '会话',
@@ -57,7 +58,7 @@
       language: '语言', apiEndpoint: 'API 接口', connection: '连接方式', proxyUrl: '代理地址',
       apiKey: 'API Key', rememberKey: '记住 Key', customModel: '自定义模型',
       thinking: '思考', thinkingContent: '思考过程', thinkingUnavailable: '当前接口不支持思考参数，已按普通模式继续', streaming: '流式输出', systemPrompt: '系统提示词', appearance: '外观',
-      testApi: '测试 API', save: '保存', cancel: '取消', discardSettings: '取消', renameChat: '重命名聊天',
+      testApi: '测试 API', save: '保存', cancel: '取消', close: '关闭', discardSettings: '取消', renameChat: '重命名聊天',
       searchChats: '搜索聊天', messagePlaceholder: '输入消息…', optionalSystem: '可选系统提示词',
       apiConfigured: 'API 已配置', apiNotConfigured: 'API 未配置',
       renderNote: 'Markdown 由项目内 md-renderer 安全渲染。',
@@ -83,6 +84,11 @@
       invalidModels: '接口未返回有效模型列表',
       invalidModelsEndpoint: '请填写有效的 HTTP(S) Chat Completions 接口地址',
       imported: '已导入 {count} 个聊天', importFailed: '导入失败',
+      manageHistory: '管理记录', historyManager: '聊天记录管理', selectAll: '全选',
+      historySelected: '已选 {count} 项', openChat: '打开',
+      exportSelectedJson: '导出所选 JSON', exportSelectedMarkdown: '导出所选 Markdown',
+      deleteSelected: '删除所选', deleteSelectedConfirm: '删除选中的 {count} 个聊天？只会删除本浏览器中的本地副本。',
+      deleteSelectedDone: '已删除 {count} 个聊天', historyNothingSelected: '请先选择聊天记录',
       fileTooLarge: '文件过大：{name}（单个文件上限 8 MB）',
       tooManyFiles: '一次最多附加 10 个文件',
       attachedCount: '已附加 {count} 个文件',
@@ -113,6 +119,7 @@
       apiKeyButton: 'API / Key', refreshModels: 'Refresh models', dark: 'Dark', light: 'Light', more: 'More',
       rename: 'Rename', export: 'Export', send: 'Send', stop: 'Stop', clearInput: 'Clear input',
       copyMessage: 'Copy message', copied: 'Copied', copyFailed: 'Copy failed',
+      retryMessage: 'Regenerate', retryConfirm: 'Regenerate from here? Later messages will be removed.', retryNoUser: 'No user message precedes this reply, so it cannot be regenerated.', retryBusy: 'Generation is running; stop it first.',
       attach: 'Attach', composerHint: 'Enter send · Shift+Enter newline · paste / drag files',
       attachmentEmpty: 'Paste, choose, or drag files / images',
       dropHere: 'Drop files or images here', import: 'Import', session: 'Session',
@@ -120,7 +127,7 @@
       language: 'Language', apiEndpoint: 'API endpoint', connection: 'Connection', proxyUrl: 'Proxy URL',
       apiKey: 'API key', rememberKey: 'Remember key', customModel: 'Custom model',
       thinking: 'Thinking', thinkingContent: 'Thinking', thinkingUnavailable: 'This endpoint does not support the thinking parameter; continued normally', streaming: 'Streaming', systemPrompt: 'System prompt', appearance: 'Appearance',
-      testApi: 'Test API', save: 'Save', cancel: 'Cancel', discardSettings: 'Cancel', renameChat: 'Rename chat',
+      testApi: 'Test API', save: 'Save', cancel: 'Cancel', close: 'Close', discardSettings: 'Cancel', renameChat: 'Rename chat',
       searchChats: 'search chats', messagePlaceholder: 'Message…', optionalSystem: 'optional system prompt',
       apiConfigured: 'API configured', apiNotConfigured: 'API not configured',
       renderNote: 'Markdown is safely rendered by the local md-renderer.',
@@ -146,6 +153,11 @@
       invalidModels: 'The endpoint did not return a valid model list',
       invalidModelsEndpoint: 'Enter a valid HTTP(S) Chat Completions endpoint',
       imported: 'Imported {count} chat(s)', importFailed: 'Import failed',
+      manageHistory: 'Manage', historyManager: 'Chat history', selectAll: 'Select all',
+      historySelected: '{count} selected', openChat: 'Open',
+      exportSelectedJson: 'Export selected JSON', exportSelectedMarkdown: 'Export selected Markdown',
+      deleteSelected: 'Delete selected', deleteSelectedConfirm: 'Delete {count} selected chat(s)? This removes only the local copies in this browser.',
+      deleteSelectedDone: 'Deleted {count} chat(s)', historyNothingSelected: 'Select at least one chat first',
       fileTooLarge: 'File too large: {name} (8 MB limit per file)',
       tooManyFiles: 'Up to 10 attachments per message',
       attachedCount: '{count} file(s) attached',
@@ -184,6 +196,7 @@
   let settings = { ...DEFAULT_SETTINGS };
   let conversations = [];
   let activeConversation = null;
+  const historySelection = new Set();
   let abortController = null;
   let isGenerating = false;
   let renderTimer = null;
@@ -250,6 +263,17 @@
     setText('exportOneBtn', 'exportChat');
     setText('exportMarkdownBtn', 'exportMarkdown');
     setText('exportAllBtn', 'exportAll');
+    setText('manageHistoryBtn', 'manageHistory');
+    setText('manageHistoryBtnTop', 'manageHistory');
+    setText('historyManagerTitle', 'historyManager');
+    setText('historyManagerCloseBtn', 'close');
+    setText('historyManagerImportBtn', 'import');
+    setText('historyManagerExportJsonBtn', 'exportSelectedJson');
+    setText('historyManagerExportMdBtn', 'exportSelectedMarkdown');
+    setText('historyManagerDeleteBtn', 'deleteSelected');
+    setText('historySelectAllLabel', 'selectAll');
+    $('historyManagerSearch').placeholder = t('searchChats');
+    $('historyManagerSearch').setAttribute('aria-label', t('searchChats'));
     setText('sendBtn', 'send');
     setText('stopBtn', 'stop');
     setText('clearDraftBtn', 'clearInput');
@@ -541,8 +565,13 @@
     return settings.theme === 'dark' || (settings.theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
   }
   function applyTheme() {
-    app.classList.toggle('az-dark', settings.theme === 'dark');
-    app.classList.toggle('az-system', settings.theme === 'system');
+    const dark = settings.theme === 'dark';
+    // The theme variables must live on <html> too: body/pseudo elements sit
+    // outside #app and would otherwise keep the light palette.
+    for (const el of [document.documentElement, app]) {
+      el.classList.toggle('az-dark', dark);
+      el.classList.toggle('az-system', settings.theme === 'system');
+    }
     document.documentElement.style.colorScheme = isDarkTheme() ? 'dark' : 'light';
     document.documentElement.style.backgroundColor = isDarkTheme() ? '#000' : '#fff';
     if ($('themeBtn')) $('themeBtn').textContent = isDarkTheme() ? t('light') : t('dark');
@@ -712,16 +741,20 @@
     renderPendingAttachments();
     updateInfoPanel();
   }
+  function conversationMatches(c, query) {
+    const q = String(query || '').trim().toLowerCase();
+    if (!q) return true;
+    const content = [
+      c.title, c.model,
+      ...(c.messages || []).map(m => `${m.content || ''} ${(m.attachments || []).map(a => a.name).join(' ')}`)
+    ].join('\n').toLowerCase();
+    return content.includes(q);
+  }
+  function filteredConversations(query) {
+    return conversations.filter(c => conversationMatches(c, query));
+  }
   function renderHistory() {
-    const q = $('historySearch').value.trim().toLowerCase();
-    const filtered = conversations.filter(c => {
-      if (!q) return true;
-      const content = [
-        c.title, c.model,
-        ...(c.messages || []).map(m => `${m.content || ''} ${(m.attachments || []).map(a => a.name).join(' ')}`)
-      ].join('\n').toLowerCase();
-      return content.includes(q);
-    });
+    const filtered = filteredConversations($('historySearch').value);
     historyListEl.innerHTML = '';
     filtered.forEach(c => {
       const row = document.createElement('div');
@@ -759,6 +792,125 @@
       empty.textContent = t('noMatching');
       historyListEl.appendChild(empty);
     }
+  }
+  function isHistoryManagerOpen() { return $('historyManagerModal').classList.contains('open'); }
+  function selectedHistoryConversations() { return conversations.filter(c => historySelection.has(c.id)); }
+  function pruneHistorySelection() {
+    const ids = new Set(conversations.map(c => c.id));
+    for (const id of historySelection) if (!ids.has(id)) historySelection.delete(id);
+  }
+  function syncHistoryManagerActions() {
+    const count = selectedHistoryConversations().length;
+    $('historySelectedCount').textContent = t('historySelected', { count });
+    for (const id of ['historyManagerExportJsonBtn', 'historyManagerExportMdBtn', 'historyManagerDeleteBtn']) {
+      $(id).disabled = count === 0;
+    }
+  }
+  function updateHistoryManagerToolbar(filtered = filteredConversations($('historyManagerSearch').value)) {
+    const selectAll = $('historySelectAll');
+    selectAll.checked = filtered.length > 0 && filtered.every(c => historySelection.has(c.id));
+    selectAll.indeterminate = !selectAll.checked && filtered.some(c => historySelection.has(c.id));
+    syncHistoryManagerActions();
+  }
+  function renderHistoryManager() {
+    const listEl = $('historyManagerList');
+    if (!listEl) return;
+    pruneHistorySelection();
+    const filtered = filteredConversations($('historyManagerSearch').value);
+    listEl.innerHTML = '';
+    filtered.forEach(c => {
+      const row = document.createElement('div');
+      row.className = 'history-manager-row' + (historySelection.has(c.id) ? ' selected' : '');
+      row.dataset.id = c.id;
+      const check = document.createElement('input');
+      check.type = 'checkbox';
+      check.checked = historySelection.has(c.id);
+      check.setAttribute('aria-label', c.title || t('untitled'));
+      check.addEventListener('click', e => e.stopPropagation());
+      check.addEventListener('change', () => {
+        if (check.checked) historySelection.add(c.id);
+        else historySelection.delete(c.id);
+        row.classList.toggle('selected', check.checked);
+        updateHistoryManagerToolbar(filtered);
+      });
+      const main = document.createElement('div');
+      main.className = 'history-manager-main';
+      const title = document.createElement('div');
+      title.className = 'history-title';
+      title.textContent = c.title || t('untitled');
+      const meta = document.createElement('div');
+      meta.className = 'history-meta';
+      meta.textContent = `${formatDate(c.updatedAt)} · ${c.messages?.length || 0} msg · ${c.model || '—'}`;
+      main.append(title, meta);
+      const open = document.createElement('button');
+      open.type = 'button';
+      open.className = 'az-button history-manager-open';
+      open.textContent = t('openChat');
+      open.addEventListener('click', e => {
+        e.stopPropagation();
+        selectConversation(c.id);
+        closeHistoryManager();
+      });
+      row.append(check, main, open);
+      row.addEventListener('click', () => {
+        const selected = !historySelection.has(c.id);
+        if (selected) historySelection.add(c.id);
+        else historySelection.delete(c.id);
+        row.classList.toggle('selected', selected);
+        check.checked = selected;
+        updateHistoryManagerToolbar(filtered);
+      });
+      listEl.appendChild(row);
+    });
+    if (!filtered.length) {
+      const empty = document.createElement('div');
+      empty.className = 'history-manager-empty';
+      empty.textContent = t('noMatching');
+      listEl.appendChild(empty);
+    }
+    updateHistoryManagerToolbar(filtered);
+  }
+  function openHistoryManager() {
+    historySelection.clear();
+    $('historyManagerSearch').value = '';
+    $('historyManagerModal').classList.add('open');
+    renderHistoryManager();
+    setTimeout(() => $('historyManagerSearch').focus(), 0);
+  }
+  function closeHistoryManager() { $('historyManagerModal').classList.remove('open'); }
+  async function deleteSelectedHistory() {
+    const selected = selectedHistoryConversations();
+    if (!selected.length) return toast(t('historyNothingSelected'));
+    if (!confirm(t('deleteSelectedConfirm', { count: selected.length }))) return;
+    if (isGenerating) stopGeneration();
+    const ids = new Set(selected.map(c => c.id));
+    for (const id of ids) await idbDelete(STORE_CONVERSATIONS, id);
+    conversations = conversations.filter(c => !ids.has(c.id));
+    historySelection.clear();
+    if (!conversations.length) {
+      const fresh = makeConversation();
+      conversations = [fresh];
+      await idbPut(STORE_CONVERSATIONS, fresh);
+    }
+    if (!activeConversation || ids.has(activeConversation.id)) activeConversation = conversations[0];
+    renderAll();
+    renderHistoryManager();
+    toast(t('deleteSelectedDone', { count: selected.length }));
+  }
+  function exportSelectedHistoryJson() {
+    const selected = selectedHistoryConversations();
+    if (!selected.length) return toast(t('historyNothingSelected'));
+    downloadJson(`az-chat-history-${new Date().toISOString().slice(0, 10)}.json`, {
+      format: 'az-llm-chat/backup-v2',
+      exportedAt: nowISO(),
+      conversations: selected
+    });
+  }
+  function exportSelectedHistoryMarkdown() {
+    const selected = selectedHistoryConversations();
+    if (!selected.length) return toast(t('historyNothingSelected'));
+    const markdown = selected.map(conversationMarkdown).join('\n\n---\n\n').trimEnd() + '\n';
+    downloadText(`az-chat-history-${new Date().toISOString().slice(0, 10)}.md`, markdown, 'text/markdown;charset=utf-8');
   }
   function selectConversation(id) {
     if (isGenerating) stopGeneration();
@@ -946,6 +1098,16 @@
       copyButton.textContent = t('copyMessage');
       copyButton.setAttribute('aria-label', t('copyMessage'));
       actions.appendChild(copyButton);
+      if (m.role === 'assistant') {
+        const retryButton = document.createElement('button');
+        retryButton.type = 'button';
+        retryButton.className = 'retry-message';
+        retryButton.dataset.messageIndex = String(index);
+        retryButton.textContent = t('retryMessage');
+        retryButton.setAttribute('aria-label', t('retryMessage'));
+        retryButton.disabled = !!m.streaming;
+        actions.appendChild(retryButton);
+      }
       wrap.append(name, box, actions);
       messagesEl.appendChild(wrap);
     });
@@ -1345,14 +1507,15 @@
     activeConversation.provider = settings.provider;
     await persistActive();
     renderMessages();
-
+    await runAssistantReply(assistantMessage, activeConversation.messages.length - 1);
+  }
+  async function runAssistantReply(assistantMessage, assistantIndex) {
     isGenerating = true;
     sendBtn.disabled = true;
     stopBtn.disabled = false;
     abortController = new AbortController();
     setBottomStatus(t('calling', { model:currentModel() }));
 
-    const assistantIndex = activeConversation.messages.length - 1;
     const apiMessages = buildApiMessages(assistantMessage.id);
     const inputEstimate = estimateApiMessages(apiMessages);
     const body = {
@@ -1431,6 +1594,32 @@
     }
   }
   function stopGeneration() { if (abortController) abortController.abort(); }
+
+  async function regenerateMessage(index) {
+    if (isGenerating) { toast(t('retryBusy'), 2200); return; }
+    if (!activeConversation) return;
+    const messages = activeConversation.messages || [];
+    const target = messages[index];
+    if (!target || target.role !== 'assistant') return;
+    let userIndex = index - 1;
+    while (userIndex >= 0 && messages[userIndex].role !== 'user') userIndex--;
+    if (userIndex < 0) { toast(t('retryNoUser')); return; }
+    if (index < messages.length - 1 && !confirm(t('retryConfirm'))) return;
+    if (!currentEndpoint()) { toast(t('missingEndpoint')); openSettings(); return; }
+    if (!currentModel()) { toast(t('missingModel')); openSettings(); return; }
+
+    messages.splice(index);
+    const assistantMessage = {
+      id:uid(), role:'assistant', content:'', createdAt:nowISO(),
+      model:currentModel(), streaming:!!settings.stream
+    };
+    messages.push(assistantMessage);
+    activeConversation.model = currentModel();
+    activeConversation.provider = settings.provider;
+    await persistActive();
+    renderMessages();
+    await runAssistantReply(assistantMessage, messages.length - 1);
+  }
 
   function isTextFile(file) {
     if (file.type?.startsWith('text/')) return true;
@@ -1714,8 +1903,7 @@
       conversation
     });
   }
-  function exportConversationMarkdown(conversation = activeConversation) {
-    if (!conversation) return;
+  function conversationMarkdown(conversation) {
     const locale = settings.language === 'zh' ? 'zh-CN' : undefined;
     const dateText = value => {
       if (!value) return '';
@@ -1751,7 +1939,11 @@
       }
       if (message.usage) lines.push(`_${t('tokens')}: ${message.usage.total_tokens || 0}${message.usage.estimated ? ' · estimated' : ''}_`, '');
     }
-    downloadText(`az-chat-${safeFileName(conversation.title)}.md`, lines.join('\n').trimEnd() + '\n', 'text/markdown;charset=utf-8');
+    return lines.join('\n').trimEnd() + '\n';
+  }
+  function exportConversationMarkdown(conversation = activeConversation) {
+    if (!conversation) return;
+    downloadText(`az-chat-${safeFileName(conversation.title)}.md`, conversationMarkdown(conversation), 'text/markdown;charset=utf-8');
   }
   function exportAll() {
     downloadJson(`az-llm-chat-backup-${new Date().toISOString().slice(0,10)}.json`, {
@@ -1797,6 +1989,7 @@
     conversations.sort((a,b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
     if (count) activeConversation = conversations[0];
     renderAll();
+    if (isHistoryManagerOpen()) renderHistoryManager();
     toast(t('imported', { count }));
   }
 
@@ -1859,9 +2052,10 @@
     $('toggleSidebarBtn').setAttribute('aria-label', t('hideSidebar'));
     $('toggleSidebarBtn').setAttribute('title', t('hideSidebar'));
     $('toggleSidebarBtn').setAttribute('aria-expanded', String(open));
-    $('showSidebarBtn').textContent = t('showSidebar');
-    $('showSidebarBtn').hidden = open;
-    $('showSidebarBtn').setAttribute('aria-expanded', String(open));
+    $('expandSidebarBtn').hidden = open;
+    $('expandSidebarBtn').setAttribute('aria-expanded', String(open));
+    $('expandSidebarBtn').setAttribute('aria-label', t('showSidebar'));
+    $('expandSidebarBtn').setAttribute('title', t('showSidebar'));
     $('modelQuick').setAttribute('aria-label', t('model'));
   }
   async function toggleSidebar() {
@@ -1880,16 +2074,12 @@
     $('settingsBtn').addEventListener('click', openSettings);
     $('newChatTopBtn').addEventListener('click', createNewChat);
     $('toggleSidebarBtn').addEventListener('click', toggleSidebar);
-    $('showSidebarBtn').addEventListener('click', toggleSidebar);
+    $('expandSidebarBtn').addEventListener('click', toggleSidebar);
     $('menuNewChatBtn').addEventListener('click', createNewChat);
     $('quickPanel').addEventListener('click', e => {
       const action = e.target.closest('.quick-actions button');
       if (!action) return;
       closeQuickPanel();
-      if (action.id === 'showSidebarBtn' && matchMedia('(max-width: 760px)').matches
-          && $('historyPanel').classList.contains('drawer-open')) {
-        $('historySearch').focus();
-      }
     });
     $('settingsClose').addEventListener('click', closeSettings);
     $('settingsCancelBtn').addEventListener('click', closeSettings);
@@ -1923,6 +2113,21 @@
       if (e.key === 'Escape') closeRename();
     });
     $('historySearch').addEventListener('input', renderHistory);
+    $('manageHistoryBtn').addEventListener('click', openHistoryManager);
+    $('manageHistoryBtnTop').addEventListener('click', openHistoryManager);
+    $('historyManagerClose').addEventListener('click', closeHistoryManager);
+    $('historyManagerCloseBtn').addEventListener('click', closeHistoryManager);
+    $('historyManagerSearch').addEventListener('input', renderHistoryManager);
+    $('historySelectAll').addEventListener('change', e => {
+      const filtered = filteredConversations($('historyManagerSearch').value);
+      if (e.target.checked) filtered.forEach(c => historySelection.add(c.id));
+      else filtered.forEach(c => historySelection.delete(c.id));
+      renderHistoryManager();
+    });
+    $('historyManagerImportBtn').addEventListener('click', () => $('importFile').click());
+    $('historyManagerExportJsonBtn').addEventListener('click', exportSelectedHistoryJson);
+    $('historyManagerExportMdBtn').addEventListener('click', exportSelectedHistoryMarkdown);
+    $('historyManagerDeleteBtn').addEventListener('click', deleteSelectedHistory);
     $('exportOneBtn').addEventListener('click', () => exportConversation(activeConversation));
     $('exportMarkdownBtn').addEventListener('click', () => exportConversationMarkdown(activeConversation));
     $('exportAllBtn').addEventListener('click', exportAll);
@@ -2052,6 +2257,11 @@
     });
 
     document.addEventListener('click', async e => {
+      const retryButton = e.target.closest('.retry-message');
+      if (retryButton) {
+        await regenerateMessage(Number(retryButton.dataset.messageIndex));
+        return;
+      }
       const messageButton = e.target.closest('.copy-message');
       if (messageButton) {
         const index = Number(messageButton.dataset.messageIndex);
@@ -2076,7 +2286,7 @@
 
     window.addEventListener('keydown', e => {
       if (e.key === 'Escape') {
-        closeSettings(); closeRename();
+        closeSettings(); closeRename(); closeHistoryManager();
         $('historyPanel').classList.remove('drawer-open', 'mobile-open');
         closeQuickPanel();
         updateSidebarControl();

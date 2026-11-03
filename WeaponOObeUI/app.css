@@ -52,6 +52,7 @@
       height: 100vh;
       position: relative;
       overflow: hidden;
+      color: var(--az-text);
       background: var(--az-page);
     }
 
@@ -311,10 +312,12 @@
     .message-wrap.assistant .message-box { margin-right: auto; }
     .message-actions {
       display: flex;
+      gap: 2px;
       margin-top: 5px;
     }
     .message-wrap.user .message-actions { justify-content: flex-end; }
-    .copy-message {
+    .copy-message,
+    .retry-message {
       appearance: none;
       padding: 2px 5px;
       border: 0;
@@ -326,11 +329,14 @@
       opacity: .72;
     }
     .copy-message:hover,
-    .copy-message:focus-visible {
+    .copy-message:focus-visible,
+    .retry-message:hover,
+    .retry-message:focus-visible {
       color: var(--az-accent);
       opacity: 1;
       outline: 1px solid var(--az-accent-alpha);
     }
+    .retry-message:disabled { opacity: .35; cursor: default; }
     .message-box.streaming::after {
       content: "▌";
       color: var(--az-accent);
@@ -1359,3 +1365,114 @@
       .setting-row.system-prompt-row textarea.az-input { width: 100%; }
       .setting-note.full-width { margin-left: 8px; margin-right: 8px; }
     }
+
+/* Chat history manager */
+.sidebar-manage {
+  flex: none;
+  height: 27px;
+  padding: 0 7px;
+  font-size: 12px;
+  line-height: 27px;
+}
+.history-manager {
+  width: 640px;
+  max-width: calc(100vw - 24px);
+  height: 620px;
+  max-height: calc(100vh - 24px);
+}
+.history-manager .modal-title { height: 66px; line-height: 64px; font-size: 34px; }
+.history-manager-toolbar {
+  position: absolute;
+  left: 24px; right: 24px; top: 76px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.history-manager-toolbar .az-input {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+  height: 26px;
+  min-height: 26px;
+  padding: 0 8px;
+  box-shadow: inset 0 0 0 1px var(--az-accent-alpha);
+}
+.history-select-all {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  white-space: nowrap;
+  color: var(--az-accent);
+}
+.history-select-all input { accent-color: var(--az-accent); }
+.history-selected-count { color: var(--az-muted); font-size: 12px; white-space: nowrap; }
+.history-manager-list {
+  position: absolute;
+  left: 24px; right: 24px; top: 116px; bottom: 72px;
+  overflow: auto;
+  border-top: 1px solid var(--az-grid);
+  border-bottom: 1px solid var(--az-grid);
+}
+.history-manager-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--az-grid);
+  cursor: default;
+}
+.history-manager-row.selected { background: var(--az-accent-alpha); }
+.history-manager-row:hover:not(.selected) { box-shadow: inset 2px 0 0 var(--az-accent-alpha); }
+.history-manager-row input[type="checkbox"] {
+  flex: none;
+  margin: 4px 0 0 0;
+  accent-color: var(--az-accent);
+}
+.history-manager-main { flex: 1; min-width: 0; }
+.history-manager-main .history-title { font-size: 14px; }
+.history-manager-main .history-meta { font-size: 11px; line-height: 14px; }
+.history-manager-open {
+  flex: none;
+  height: 24px;
+  padding: 0 6px;
+  font-size: 11px;
+}
+.history-manager-empty {
+  padding: 18px 8px;
+  color: var(--az-muted);
+  font-size: 13px;
+}
+.history-manager-actions { left: 24px; right: 24px; bottom: 18px; flex-wrap: wrap; }
+.history-manager-actions .az-button { height: 24px; min-height: 24px; }
+.history-manager-actions .danger { color: var(--az-accent); }
+.history-manager-actions .az-button[disabled] { opacity: .45; }
+@media (max-width: 700px) {
+  .history-manager { width: calc(100vw - 16px); height: calc(100dvh - 16px); max-height: 720px; }
+  .history-manager .modal-title { height: 60px; line-height: 58px; font-size: 28px; }
+  .history-manager-toolbar { left: 12px; right: 12px; top: 68px; flex-wrap: wrap; height: auto; row-gap: 6px; }
+  .history-manager-toolbar .az-input { flex: 1 1 100%; }
+  .history-manager-list { left: 12px; right: 12px; top: 138px; bottom: 108px; }
+  .history-manager-actions { left: 12px; right: 12px; bottom: 12px; }
+}
+
+/* Sidebar expand handle (outside the sidebar) */
+.expand-sidebar {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 64px;
+  z-index: 90;
+  padding: 0;
+  font-size: 20px;
+  line-height: 62px;
+  border-radius: 0 .15em .15em 0;
+  box-shadow: 0 0 10px var(--az-accent-alpha);
+}
+.expand-sidebar[hidden] { display: none; }
+@media (max-width: 760px) {
+  .expand-sidebar { width: 22px; height: 54px; line-height: 52px; }
+}
