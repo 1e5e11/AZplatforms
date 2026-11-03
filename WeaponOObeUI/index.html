@@ -7,14 +7,14 @@
   <title>WEAPON OOBE UI</title>
 
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css" crossorigin="anonymous" />
-  <link rel="stylesheet" href="./md-renderer.css?v=2026-10-02-1" />
-  <link rel="stylesheet" href="./app.css?v=2026-10-02-1" />
+  <link rel="stylesheet" href="./md-renderer.css?v=2026-11-03-4" />
+  <link rel="stylesheet" href="./app.css?v=2026-11-03-4" />
   <script defer src="https://cdn.jsdelivr.net/npm/marked@15.0.7/lib/marked.umd.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/dompurify@3.2.6/dist/purify.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.11.1/build/highlight.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js" crossorigin="anonymous"></script>
-  <script defer src="./md-renderer.js?v=2026-10-02-1"></script>
-  <script defer src="./app.js?v=2026-10-02-1"></script>
+  <script defer src="./md-renderer.js?v=2026-11-03-4"></script>
+  <script defer src="./app.js?v=2026-11-03-4"></script>
 
 </head>
 <body>
@@ -31,6 +31,7 @@
 
   <section class="az-panel top-tools">
     <div class="tool-row primary">
+      <button id="newChatTopBtn" class="az-button top-new-chat" type="button" aria-label="New chat"><span id="newChatTopLabel">New chat</span></button>
       <select id="modelQuick" class="az-select w-220" aria-label="Model"></select>
       <button id="refreshModelsBtn" class="az-button" type="button">Refresh models</button>
       <button id="moreBtn" class="az-button" aria-expanded="false" aria-controls="quickPanel">More</button>
@@ -41,6 +42,7 @@
         <button id="menuNewChatBtn" class="az-button" type="button">New chat</button>
         <button id="settingsBtn" class="az-button" type="button">Settings</button>
         <button id="themeBtn" class="az-button" type="button">Dark</button>
+        <button id="exportMarkdownBtn" class="az-button" type="button">Export Markdown</button>
       </div>
       <details class="quick-advanced">
         <summary id="quickAdvancedTitle">Chat &amp; parameters</summary>
@@ -54,12 +56,15 @@
         <div class="quick-row">
         <span class="tool-label" id="providerQuickLabel">Provider</span>
         <select id="providerQuick" class="az-select w-120">
+          <option value="pollinations">Pollinations · 免费</option>
+          <option value="keylessai">KeylessAI · 免费</option>
           <option value="opencode">OpenCode Zen</option>
           <option value="openai">OpenAI</option>
           <option value="deepseek">DeepSeek</option>
           <option value="glm">智谱 GLM</option>
           <option value="kimi">Moonshot Kimi</option>
           <option value="siliconflow">硅基流动</option>
+          <option value="azai">AZAI</option>
           <option value="custom">Custom API</option>
         </select>
         <select id="languageQuick" class="az-select w-80" aria-label="Language">
@@ -116,7 +121,7 @@
       <summary id="sessionPanelTitle">Session</summary>
       <div class="info-body">
         <div class="status-line"><span id="apiDot" class="status-dot"></span><span id="apiStatus">API not configured</span></div>
-        <div><span id="infoProviderLabel">Provider</span>: <span id="infoProvider" class="accent">OpenCode Zen</span></div>
+        <div><span id="infoProviderLabel">Provider</span>: <span id="infoProvider" class="accent">Pollinations · 免费</span></div>
         <div><span id="infoModelLabel">Model</span>: <span id="infoModel" class="accent">—</span></div>
         <div><span id="infoMessagesLabel">Messages</span>: <span id="infoMessages">0</span></div>
         <div><span id="infoTokensLabel">Tokens</span>: <span id="infoTokens" class="accent">0</span></div>
@@ -145,12 +150,15 @@
         <div class="setting-row">
           <label for="providerSetting" id="providerSettingLabel">Provider</label>
           <select id="providerSetting" class="az-select">
+            <option value="pollinations">Pollinations · 免费</option>
+            <option value="keylessai">KeylessAI · 免费</option>
             <option value="opencode">OpenCode Zen</option>
             <option value="openai">OpenAI</option>
             <option value="deepseek">DeepSeek</option>
             <option value="glm">智谱 GLM</option>
             <option value="kimi">Moonshot Kimi</option>
             <option value="siliconflow">硅基流动</option>
+            <option value="azai">AZAI（啊这一号）</option>
             <option value="custom">Custom OpenAI-compatible</option>
           </select>
         </div>
@@ -165,11 +173,14 @@
           <label for="customModelSetting" id="customModelSettingLabel">Custom model</label>
           <input id="customModelSetting" class="az-input" list="modelPresets" placeholder="model-id" />
           <datalist id="modelPresets">
+            <option value="openai-fast"></option>
+            <option value="gpt-4o"></option>
             <option value="gpt-5.2"></option>
             <option value="deepseek-chat"></option>
             <option value="glm-4.5-flash"></option>
             <option value="kimi-k3"></option>
             <option value="deepseek-ai/DeepSeek-V4-Flash"></option>
+            <option value="AZ I"></option>
           </datalist>
         </div>
         <div class="setting-row">
@@ -213,6 +224,7 @@
           </select>
         </div>
         <div class="setting-note" id="keySettingNote">A remembered key is stored locally in IndexedDB. Any script running on the same origin can potentially access it.</div>
+        <div id="azaiSettingNote" class="setting-note full-width" hidden><span id="azaiSettingNoteText">AZAI defaults to no API key, accepts text only, and supports temperature from 0 to 5.</span> <a id="azaiDocsLink" href="https://ssssssss.eu.org/ai/docs/AZ%20I/api.md" target="_blank" rel="noopener noreferrer">API documentation</a></div>
       </details>
       <details class="settings-group">
         <summary id="generationSettingsSummary">Generation</summary>
@@ -227,13 +239,22 @@
             <option value="false">Off</option>
           </select>
         </div>
-        <div class="setting-row" style="min-height:96px">
+      </details>
+      <details class="settings-group">
+        <summary id="instructionsSettingsSummary">Instructions</summary>
+        <div class="setting-row system-prompt-row">
           <label for="systemPromptSetting" id="systemPromptSettingLabel">System prompt</label>
-          <textarea id="systemPromptSetting" class="az-input" placeholder="optional system prompt"></textarea>
+          <textarea id="systemPromptSetting" class="az-input" maxlength="10000" placeholder="optional system prompt"></textarea>
+          <div class="system-prompt-footer">
+            <span id="systemPromptCount" class="muted">0 / 10000</span>
+            <button id="clearSystemPromptBtn" class="az-button" type="button">Clear prompt</button>
+          </div>
         </div>
+        <div id="systemPromptNote" class="setting-note full-width">This instruction is sent before each conversation. Changes take effect when you save.</div>
       </details>
     </div>
     <div class="modal-actions">
+      <button id="settingsCancelBtn" class="az-button" type="button">Cancel</button>
       <button id="testApiBtn" class="az-button">Test API</button>
       <button id="saveSettingsBtn" class="az-button">Save</button>
     </div>

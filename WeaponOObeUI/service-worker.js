@@ -1,4 +1,4 @@
-const VERSION = '2026-09-28-1';
+const VERSION = '2026-11-03-4';
 const CACHE_PREFIX = 'weapon-oobe-ui-static-';
 const CACHE_NAME = CACHE_PREFIX + VERSION;
 const SCOPE = self.registration.scope;

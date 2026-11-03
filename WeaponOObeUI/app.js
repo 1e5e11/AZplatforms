@@ -1,16 +1,21 @@
 (() => {
   'use strict';
 
-  const BUILD = '2026-10-02-model-refresh-1';
+  const BUILD = '2026-11-03-pollinations-4';
   const OPENCODE_ENDPOINT = 'https://opencode.ai/zen/v1/chat/completions';
   const OPENCODE_MODELS_ENDPOINT = 'https://opencode.ai/zen/v1/models';
+  const POLLINATIONS_ENDPOINT = 'https://text.pollinations.ai/openai';
+  const KEYLESSAI_ENDPOINT = 'https://keylessai.thryx.workers.dev/v1/chat/completions';
   const PROVIDER_PRESETS = {
+    pollinations: { name:'Pollinations · 免费', endpoint:POLLINATIONS_ENDPOINT, model:'openai-fast' },
+    keylessai: { name:'KeylessAI · 免费', endpoint:KEYLESSAI_ENDPOINT, model:'gpt-4o' },
     opencode: { name:'OpenCode Zen', endpoint:OPENCODE_ENDPOINT, model:'mimo-v2.5-free' },
     openai: { name:'OpenAI', endpoint:'https://api.openai.com/v1/chat/completions', model:'gpt-5.2' },
     deepseek: { name:'DeepSeek', endpoint:'https://api.deepseek.com/chat/completions', model:'deepseek-chat' },
     glm: { name:'智谱 GLM', endpoint:'https://open.bigmodel.cn/api/paas/v4/chat/completions', model:'glm-4.5-flash' },
     kimi: { name:'Moonshot Kimi', endpoint:'https://api.moonshot.cn/v1/chat/completions', model:'kimi-k3' },
     siliconflow: { name:'硅基流动', endpoint:'https://api.siliconflow.cn/v1/chat/completions', model:'deepseek-ai/DeepSeek-V4-Flash' },
+    azai: { name:'AZAI（啊这一号）', endpoint:'https://ai.realgeneral.eu.org/v1/chat/completions', model:'AZ I' },
     custom: { name:'Custom API', endpoint:'', model:'custom-model' }
   };
   const LOCAL_PROXY_DEFAULT = 'http://127.0.0.1:8787/api/proxy';
@@ -34,11 +39,11 @@
   const OPENCODE_CHAT_FREE_IDS = new Set(OPENCODE_FREE_PRESETS.map(x => x.id));
 
   const DEFAULT_SETTINGS = {
-    provider: 'opencode',
-    apiBase: OPENCODE_ENDPOINT,
+    provider: 'pollinations',
+    apiBase: POLLINATIONS_ENDPOINT,
     apiKey: '',
     rememberKey: false,
-    model: 'mimo-v2.5-free',
+    model: 'openai-fast',
     customModel: '',
     temperature: 0.7,
     stream: true,
@@ -48,7 +53,7 @@
     systemPrompt: '',
     theme: 'system',
     language: 'zh',
-    transport: 'auto',
+    transport: 'direct',
     proxyUrl: DEFAULT_PROXY_URL,
     openCodeModels: OPENCODE_FREE_PRESETS,
     providerModels: {}
@@ -57,7 +62,7 @@
   const I18N = {
     zh: {
       provider: '提供商', model: '模型', endpoint: '接口', temperature: '温度',
-      stream: '流式', storage: '存储', newChat: '新聊天', history: '历史',
+      stream: '流式', storage: '存储', newChat: '新聊天', newChatTop: '新建聊天', history: '历史',
       apiKeyButton: 'API / Key', refreshModels: '刷新模型', dark: '深色', light: '浅色', more: '更多',
       rename: '重命名', export: '导出', send: '发送', stop: '停止', clearInput: '清空输入',
       copyMessage: '复制消息', copied: '已复制', copyFailed: '复制失败',
@@ -68,12 +73,12 @@
       language: '语言', apiEndpoint: 'API 接口', connection: '连接方式', proxyUrl: '代理地址',
       apiKey: 'API Key', rememberKey: '记住 Key', customModel: '自定义模型',
       thinking: '思考', thinkingContent: '思考过程', thinkingUnavailable: '当前接口不支持思考参数，已按普通模式继续', streaming: '流式输出', systemPrompt: '系统提示词', appearance: '外观',
-      testApi: '测试 API', save: '保存', cancel: '取消', renameChat: '重命名聊天',
+      testApi: '测试 API', save: '保存', cancel: '取消', discardSettings: '取消', renameChat: '重命名聊天',
       searchChats: '搜索聊天', messagePlaceholder: '输入消息…', optionalSystem: '可选系统提示词',
       apiConfigured: 'API 已配置', apiNotConfigured: 'API 未配置',
       renderNote: 'Markdown 由项目内 md-renderer 安全渲染。',
       endpointNote: '填写完整的 Chat Completions 地址，而不是只填 /v1 基础地址。',
-      proxyNote: '公网部署默认使用同源 /api/proxy，避免第三方 API 的 CORS 限制；本机打开时使用 127.0.0.1:8787。纯静态站点若没有 /api/proxy，OpenCode 跨域请求仍会被浏览器阻止。',
+      proxyNote: '默认浏览器直连。若接口不允许跨域，可在此配置代理地址。',
       keyNote: '若选择记住 Key，会把 Key 保存在本浏览器 IndexedDB；同源脚本理论上可能读取它。',
       modelSwitchWarn: '这个对话已经有历史消息。中途切换模型可能降低上下文一致性和性能。\n\n仍要切换模型吗？',
       modelSwitchToast: '已切换模型 · 旧上下文可能影响表现',
@@ -85,9 +90,9 @@
       apiFailed: 'API 请求失败', apiTestFailed: 'API 测试失败', apiTestOk: 'API 测试成功',
       missingEndpoint: '请先设置 API 接口', missingModel: '请先选择模型',
       emptyResponse: '[空回复]', stoppedText: '[生成已停止]',
-      failedFetch: 'API 连接失败。公网 HTTPS 页面调用 OpenCode 时需要同源 /api/proxy；纯前端无法绕过第三方服务器的 CORS。若在本机使用，请运行 az_llm_server.py。',
+      failedFetch: 'API 连接失败。请检查网络和接口地址，或改用支持跨域的供应商。',
       directFailedProxyOk: '浏览器直连不可用，已自动通过代理连接',
-      proxyUnavailable: '代理不可用。公网部署请配置同源 /api/proxy；本机请运行 az_llm_server.py',
+      proxyUnavailable: '代理不可用。请检查设置中的代理地址，或把连接方式改为“浏览器直连”。',
       testing: '正在测试 API…', refreshingModels: '刷新中…', refreshStart: '正在刷新 {provider} 模型…',
       refreshDone: '{provider} 模型已刷新（{count} 个）',
       refreshFallback: '模型刷新失败 · 保留已有模型选项',
@@ -103,15 +108,23 @@
       input: '输入', output: '输出', total: '总计',
       draft: '草稿估算', localHistory: '本地记录',
       providerOpenCode: 'OpenCode Zen', providerCustom: '自定义 API',
-      connectionAuto: 'Auto（OpenCode 优先同源代理）', connectionDirect: '浏览器直连',
+      connectionAuto: 'Auto（直连优先，失败后走代理）', connectionDirect: '浏览器直连',
       connectionProxy: '代理 / 同源 Relay', rememberNo: '否', rememberYes: '是，保存在此浏览器',
       on: '开', off: '关', themeSystem: '跟随系统', themeLight: '浅色', themeDark: '深色',
-      basicSettings: '常用设置', connectionSettings: '连接与密钥', generationSettings: '生成设置',
-      resizeSidebar: '调整侧栏宽度', closeHistory: '关闭历史', showSidebar: '展开侧栏', hideSidebar: '收起侧栏', quickAdvanced: '会话与参数', exportChat: '导出聊天', exportAll: '导出全部'
+      basicSettings: '常用设置', connectionSettings: '连接与密钥', generationSettings: '生成设置', instructionsSettings: '提示词',
+      resizeSidebar: '调整侧栏宽度', closeHistory: '关闭历史', showSidebar: '展开侧栏', hideSidebar: '收起侧栏', quickAdvanced: '会话与参数', exportChat: '导出 JSON', exportMarkdown: '导出 Markdown', exportAll: '导出全部',
+      systemPromptNote: '此提示词会在每次对话中优先发送；保存后生效。', promptCount: '{count} / 10000', clearSystemPrompt: '清空提示词',
+      keyOptional: 'AZAI 默认无需 API Key；仅在服务端启用认证时填写。', azaiSettingNote: '模型 AZ I 仅支持文本，温度范围为 0–5，服务端固定关闭思考参数。',
+      apiKeyOptionalPlaceholder: '可选；默认无需填写', azaiDocsLink: 'AZAI API 文档',
+      pollinationsKeyNote: 'Pollinations 免费接口无需 API Key，打开页面即可对话；匿名额度有频率限制。',
+      keylessaiKeyNote: 'KeylessAI 免费接口无需 API Key，任意非空 Key 均可。',
+      pollinationsSettingNote: 'Pollinations 免费、无需 Key。仅 localhost 域名会被 Turnstile 拦截；用 file://、127.0.0.1 或正式域名打开即可直连。',
+      keylessaiSettingNote: 'KeylessAI 免费、无需 Key。workers.dev 在部分地区被 SNI 阻断；如直连失败，可为 Worker 绑定自定义域名。',
+      azaiImagesUnsupported: 'AZAI 仅支持文本；已在请求中省略图片附件。'
     },
     en: {
       provider: 'Provider', model: 'Model', endpoint: 'Endpoint', temperature: 'Temperature',
-      stream: 'Stream', storage: 'Storage', newChat: 'New', history: 'History',
+      stream: 'Stream', storage: 'Storage', newChat: 'New', newChatTop: 'New chat', history: 'History',
       apiKeyButton: 'API / Key', refreshModels: 'Refresh models', dark: 'Dark', light: 'Light', more: 'More',
       rename: 'Rename', export: 'Export', send: 'Send', stop: 'Stop', clearInput: 'Clear input',
       copyMessage: 'Copy message', copied: 'Copied', copyFailed: 'Copy failed',
@@ -122,12 +135,12 @@
       language: 'Language', apiEndpoint: 'API endpoint', connection: 'Connection', proxyUrl: 'Proxy URL',
       apiKey: 'API key', rememberKey: 'Remember key', customModel: 'Custom model',
       thinking: 'Thinking', thinkingContent: 'Thinking', thinkingUnavailable: 'This endpoint does not support the thinking parameter; continued normally', streaming: 'Streaming', systemPrompt: 'System prompt', appearance: 'Appearance',
-      testApi: 'Test API', save: 'Save', cancel: 'Cancel', renameChat: 'Rename chat',
+      testApi: 'Test API', save: 'Save', cancel: 'Cancel', discardSettings: 'Cancel', renameChat: 'Rename chat',
       searchChats: 'search chats', messagePlaceholder: 'Message…', optionalSystem: 'optional system prompt',
       apiConfigured: 'API configured', apiNotConfigured: 'API not configured',
       renderNote: 'Markdown is safely rendered by the local md-renderer.',
       endpointNote: 'Use the full Chat Completions endpoint, not only the /v1 base URL.',
-      proxyNote: 'Public deployments default to same-origin /api/proxy to avoid third-party CORS restrictions; local pages use 127.0.0.1:8787. A purely static deployment still cannot bypass OpenCode CORS without /api/proxy.',
+      proxyNote: 'Browser-direct by default. Configure a proxy URL here if an endpoint does not allow CORS.',
       keyNote: 'A remembered key is stored locally in IndexedDB. Any script running on the same origin can potentially access it.',
       modelSwitchWarn: 'This conversation already has history. Switching models mid-conversation can reduce context consistency and performance.\n\nSwitch anyway?',
       modelSwitchToast: 'Model switched · earlier context may affect performance',
@@ -139,9 +152,9 @@
       apiFailed: 'API request failed', apiTestFailed: 'API test failed', apiTestOk: 'API test succeeded',
       missingEndpoint: 'Set API endpoint first', missingModel: 'Select a model first',
       emptyResponse: '[empty response]', stoppedText: '[generation stopped]',
-      failedFetch: 'API connection failed. Public HTTPS pages need a same-origin /api/proxy for OpenCode; frontend JavaScript cannot bypass a third-party server’s CORS policy. For local use, run az_llm_server.py.',
+      failedFetch: 'API connection failed. Check the network and endpoint, or switch to a provider that allows CORS.',
       directFailedProxyOk: 'Browser-direct request was unavailable; connected through the proxy',
-      proxyUnavailable: 'Proxy unavailable. Configure same-origin /api/proxy for public deployment, or run az_llm_server.py locally',
+      proxyUnavailable: 'Proxy unavailable. Check the proxy URL, or set Connection to Browser direct.',
       testing: 'Testing API…', refreshingModels: 'Refreshing…', refreshStart: 'Refreshing {provider} models…',
       refreshDone: '{provider} models refreshed ({count})',
       refreshFallback: 'Model refresh failed · keeping existing model options',
@@ -157,11 +170,19 @@
       input: 'input', output: 'output', total: 'total',
       draft: 'draft est.', localHistory: 'local history',
       providerOpenCode: 'OpenCode Zen', providerCustom: 'Custom API',
-      connectionAuto: 'Auto (OpenCode prefers same-origin relay)', connectionDirect: 'Browser direct',
+      connectionAuto: 'Auto (direct first, then relay)', connectionDirect: 'Browser direct',
       connectionProxy: 'Proxy / same-origin relay', rememberNo: 'No', rememberYes: 'Yes, in this browser',
       on: 'on', off: 'off', themeSystem: 'System', themeLight: 'Light', themeDark: 'Dark',
-      basicSettings: 'Basic', connectionSettings: 'Connection & key', generationSettings: 'Generation',
-      resizeSidebar: 'Resize sidebar', closeHistory: 'Close history', showSidebar: 'Show sidebar', hideSidebar: 'Hide sidebar', quickAdvanced: 'Chat & parameters', exportChat: 'Export chat', exportAll: 'Export all'
+      basicSettings: 'Basic', connectionSettings: 'Connection & key', generationSettings: 'Generation', instructionsSettings: 'Instructions',
+      resizeSidebar: 'Resize sidebar', closeHistory: 'Close history', showSidebar: 'Show sidebar', hideSidebar: 'Hide sidebar', quickAdvanced: 'Chat & parameters', exportChat: 'Export JSON', exportMarkdown: 'Export Markdown', exportAll: 'Export all',
+      systemPromptNote: 'This instruction is sent before each conversation and takes effect when saved.', promptCount: '{count} / 10000', clearSystemPrompt: 'Clear prompt',
+      keyOptional: 'AZAI does not require a key by default. Enter one only if server authentication is enabled.', azaiSettingNote: 'AZ I accepts text only, supports temperature from 0 to 5, and keeps reasoning disabled on the server.',
+      apiKeyOptionalPlaceholder: 'Optional; no key by default', azaiDocsLink: 'AZAI API docs',
+      pollinationsKeyNote: 'Pollinations is free and needs no API key — the page works as soon as it opens. Anonymous requests are rate limited.',
+      keylessaiKeyNote: 'KeylessAI is free and needs no API key; any non-empty key is accepted.',
+      pollinationsSettingNote: 'Pollinations is free and keyless. Only the localhost hostname is blocked by Turnstile; open the page from file://, 127.0.0.1, or a real domain to connect directly.',
+      keylessaiSettingNote: 'KeylessAI is free and keyless. workers.dev is SNI-blocked in some regions; bind a custom domain to the Worker if direct calls fail.',
+      azaiImagesUnsupported: 'AZAI accepts text only; image attachments were omitted from this request.'
     }
   };
 
@@ -231,6 +252,8 @@
     setText('streamQuickLabel', 'stream');
     setText('storageQuickLabel', 'storage');
     setText('newChatBtn', 'newChat');
+    setText('newChatTopLabel', 'newChatTop');
+    $('newChatTopBtn').setAttribute('aria-label', t('newChatTop'));
     setText('settingsBtn', 'settings');
     setText('menuNewChatBtn', 'newChat');
     setText('quickAdvancedTitle', 'quickAdvanced');
@@ -239,6 +262,7 @@
     updateModelRefreshButton(true);
     setText('renameBtn', 'rename');
     setText('exportOneBtn', 'exportChat');
+    setText('exportMarkdownBtn', 'exportMarkdown');
     setText('exportAllBtn', 'exportAll');
     setText('sendBtn', 'send');
     setText('stopBtn', 'stop');
@@ -262,12 +286,14 @@
     setText('transportSettingLabel', 'connection');
     setText('proxyUrlSettingLabel', 'proxyUrl');
     setText('apiKeySettingLabel', 'apiKey');
+    setText('azaiDocsLink', 'azaiDocsLink');
     setText('rememberKeySettingLabel', 'rememberKey');
     setText('modelSettingLabel', 'model');
     setText('customModelSettingLabel', 'customModel');
     setText('temperatureSettingLabel', 'temperature');
     setText('streamSettingLabel', 'streaming');
     setText('systemPromptSettingLabel', 'systemPrompt');
+    setText('clearSystemPromptBtn', 'clearSystemPrompt');
     setText('themeSettingLabel', 'appearance');
     setText('testApiBtn', 'testApi');
     setText('saveSettingsBtn', 'save');
@@ -281,10 +307,18 @@
     setText('basicSettingsSummary', 'basicSettings');
     setText('connectionSettingsSummary', 'connectionSettings');
     setText('generationSettingsSummary', 'generationSettings');
+    setText('instructionsSettingsSummary', 'instructionsSettings');
+    setText('settingsCancelBtn', 'discardSettings');
 
     promptInput.placeholder = t('messagePlaceholder');
     $('historySearch').placeholder = t('searchChats');
     $('systemPromptSetting').placeholder = t('optionalSystem');
+    $('systemPromptNote').textContent = t('systemPromptNote');
+    $('systemPromptCount').textContent = t('promptCount', { count:$('systemPromptSetting').value.length });
+    const helpProvider = $('settingsModal').classList.contains('open')
+      ? $('providerSetting').value
+      : settings.provider;
+    updateSettingsProviderHelp(helpProvider);
     $('attachmentStrip').dataset.empty = t('attachmentEmpty');
     $('dropOverlay').textContent = t('dropHere');
     $('themeBtn').textContent = isDarkTheme() ? t('light') : t('dark');
@@ -332,6 +366,32 @@
   function clampNumber(value, min, max, fallback) {
     const n = Number(value);
     return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : fallback;
+  }
+  function temperatureMax(provider = settings.provider) {
+    return provider === 'azai' ? 5 : 2;
+  }
+  function updateTemperatureBounds(provider = settings.provider, includeQuick = true) {
+    const max = String(temperatureMax(provider));
+    if (includeQuick) $('temperatureQuick').max = max;
+    $('temperatureSetting').max = max;
+  }
+  function updateSystemPromptCount() {
+    $('systemPromptCount').textContent = t('promptCount', { count:$('systemPromptSetting').value.length });
+  }
+  function updateSettingsProviderHelp(provider = settings.provider) {
+    $('keySettingNote').textContent = provider === 'pollinations'
+      ? t('pollinationsKeyNote')
+      : provider === 'keylessai' ? t('keylessaiKeyNote')
+      : provider === 'azai' ? t('keyOptional') : t('keyNote');
+    $('apiKeySetting').placeholder = ['pollinations', 'keylessai', 'azai'].includes(provider) ? t('apiKeyOptionalPlaceholder') : 'sk-…';
+    const notes = {
+      azai: t('azaiSettingNote'),
+      pollinations: t('pollinationsSettingNote'),
+      keylessai: t('keylessaiSettingNote')
+    };
+    $('azaiSettingNoteText').textContent = notes[provider] || '';
+    $('azaiSettingNote').hidden = !notes[provider];
+    $('azaiDocsLink').hidden = provider !== 'azai';
   }
 
   function openDB() {
@@ -403,7 +463,9 @@
     if (!['system','light','dark'].includes(settings.theme)) settings.theme = 'system';
     settings.sidebarCollapsed = settings.sidebarCollapsed === true;
     settings.sidebarWidth = clampNumber(settings.sidebarWidth, 210, 420, 256);
-    if (!PROVIDER_PRESETS[settings.provider]) settings.provider = 'opencode';
+    if (!PROVIDER_PRESETS[settings.provider]) settings.provider = 'pollinations';
+    settings.temperature = clampNumber(settings.temperature, 0, temperatureMax(settings.provider), 0.7);
+    if (settings.provider === 'azai') settings.thinking = false;
     // Migrate v2's localhost proxy setting when this same file is deployed on a
     // public HTTP(S) origin. 127.0.0.1 would otherwise point at each visitor's
     // own machine and produce ERR_CONNECTION_REFUSED.
@@ -447,7 +509,7 @@
       changed = true;
     }
     if (params.has('temperature') && Number.isFinite(Number(value('temperature')))) {
-      settings.temperature = clampNumber(value('temperature'), 0, 2, settings.temperature);
+      settings.temperature = clampNumber(value('temperature'), 0, temperatureMax(settings.provider), settings.temperature);
       changed = true;
     }
     for (const name of ['stream', 'thinking']) {
@@ -459,6 +521,7 @@
     if (params.has('systemPrompt')) { settings.systemPrompt = (params.get('systemPrompt') || '').slice(0, 10000); changed = true; }
     if (['system', 'light', 'dark'].includes(value('theme'))) { settings.theme = value('theme'); changed = true; }
     if (['zh', 'en'].includes(value('language'))) { settings.language = value('language'); changed = true; }
+    if (settings.provider === 'azai') settings.thinking = false;
     if (params.has('apiKey')) {
       sessionApiKey = params.get('apiKey') || '';
       settings.rememberKey = false;
@@ -502,10 +565,15 @@
     let url;
     try { url = new URL(endpoint); }
     catch { throw new Error(t('invalidModelsEndpoint')); }
-    if (!['http:', 'https:'].includes(url.protocol) || !/\/chat\/completions\/?$/.test(url.pathname)) {
+    if (!['http:', 'https:'].includes(url.protocol)) throw new Error(t('invalidModelsEndpoint'));
+    if (/\/chat\/completions\/?$/.test(url.pathname)) {
+      url.pathname = url.pathname.replace(/\/chat\/completions\/?$/, '/models');
+    } else if (/\/openai\/?$/.test(url.pathname)) {
+      // Pollinations' OpenAI-compatible endpoint is /openai; its catalog is /models.
+      url.pathname = url.pathname.replace(/\/openai\/?$/, '/models');
+    } else {
       throw new Error(t('invalidModelsEndpoint'));
     }
-    url.pathname = url.pathname.replace(/\/chat\/completions\/?$/, '/models');
     url.hash = '';
     return url.href;
   }
@@ -544,10 +612,12 @@
     $('providerQuick').value = settings.provider;
     buildModelOptions($('modelQuick'), settings.model);
     $('endpointQuick').value = currentEndpoint();
+    updateTemperatureBounds(settings.provider);
     $('temperatureQuick').value = settings.temperature;
     $('streamQuick').value = String(settings.stream);
     $('thinkingBtn').setAttribute('aria-pressed', String(!!settings.thinking));
     $('thinkingBtn').classList.toggle('active', !!settings.thinking);
+    $('thinkingBtn').hidden = settings.provider === 'azai';
     $('languageQuick').value = settings.language;
 
     $('languageSetting').value = settings.language;
@@ -562,6 +632,7 @@
     $('temperatureSetting').value = settings.temperature;
     $('streamSetting').value = String(settings.stream);
     $('systemPromptSetting').value = settings.systemPrompt || '';
+    updateSystemPromptCount();
     $('themeSetting').value = settings.theme;
     applyLanguage();
     updateInfoPanel();
@@ -580,7 +651,7 @@
       rememberKey: $('rememberKeySetting').value === 'true',
       model,
       customModel: $('customModelSetting').value.trim(),
-      temperature: clampNumber($('temperatureSetting').value, 0, 2, 0.7),
+      temperature: clampNumber($('temperatureSetting').value, 0, temperatureMax(provider), 0.7),
       stream: $('streamSetting').value === 'true',
       systemPrompt: $('systemPromptSetting').value,
       theme: $('themeSetting').value
@@ -978,8 +1049,10 @@
   function updateInfoPanel() {
     const keyReady = !!currentApiKey();
     const endpointReady = !!currentEndpoint();
-    $('apiDot').classList.toggle('on', endpointReady && (keyReady || settings.provider === 'opencode'));
-    $('apiStatus').textContent = endpointReady ? t('apiConfigured') : t('apiNotConfigured');
+    const keyOptional = ['pollinations', 'keylessai', 'opencode', 'azai'].includes(settings.provider);
+    const configured = endpointReady && (keyReady || keyOptional);
+    $('apiDot').classList.toggle('on', configured);
+    $('apiStatus').textContent = configured ? t('apiConfigured') : t('apiNotConfigured');
     $('infoProvider').textContent = PROVIDER_PRESETS[settings.provider]?.name || t('providerCustom');
     $('infoModel').textContent = currentModel() || '—';
     $('infoMessages').textContent = activeConversation?.messages?.length || 0;
@@ -1001,26 +1074,80 @@
     headers.set('X-AZ-Target', target);
     return fetch(proxyUrl, { ...init, headers });
   }
-  function likelyLocalServerOrigin() {
-    return location.protocol === 'http:' &&
-      ['127.0.0.1','localhost'].includes(location.hostname) &&
-      location.port === '8787';
+  function isPollinationsTarget(target) {
+    try { return new URL(target, location.href).hostname === 'text.pollinations.ai'; }
+    catch { return false; }
   }
-  function isOpenCodeTarget(target) {
-    try {
-      const u = new URL(target, location.href);
-      return u.hostname === 'opencode.ai' && u.pathname.startsWith('/zen/');
-    } catch { return false; }
+  // The classic Pollinations API accepts one request at a time per IP. Hold the
+  // slot until the response body is fully consumed (streams included), release
+  // it on abort, and retry briefly when a 429 says the previous request is still
+  // running.
+  let pollinationsBusy = false;
+  const pollinationsQueue = [];
+  function releasePollinationsSlot() {
+    const next = pollinationsQueue.shift();
+    if (next) next();
+    else pollinationsBusy = false;
   }
-  function isPublicWebOrigin() {
-    return IS_WEB_PAGE && !IS_LOOPBACK_PAGE;
+  function waitForPollinationsSlot() {
+    return new Promise(resolve => pollinationsQueue.push(resolve));
+  }
+  async function pollinationsRequest(run, signal) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (pollinationsBusy) await waitForPollinationsSlot();
+      else pollinationsBusy = true;
+      let response;
+      try {
+        response = await Promise.race([
+          run(),
+          new Promise((_, reject) => {
+            if (!signal) return;
+            const abort = () => reject(Object.assign(new Error('Aborted'), { name: 'AbortError' }));
+            if (signal.aborted) abort();
+            else signal.addEventListener('abort', abort, { once: true });
+          })
+        ]);
+      } catch (error) {
+        releasePollinationsSlot();
+        throw error;
+      }
+      if (response.status === 429 && attempt < 2) {
+        try { await response.body?.cancel(); } catch {}
+        releasePollinationsSlot();
+        await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+        continue;
+      }
+      if (!response.body) { releasePollinationsSlot(); return response; }
+      const reader = response.body.getReader();
+      let released = false;
+      const done = () => { if (!released) { released = true; releasePollinationsSlot(); } };
+      const body = new ReadableStream({
+        async pull(controller) {
+          try {
+            const { value, done: finished } = await reader.read();
+            if (finished) { controller.close(); done(); }
+            else controller.enqueue(value);
+          } catch (error) {
+            controller.error(error);
+            done();
+          }
+        },
+        cancel(reason) { done(); return reader.cancel(reason); }
+      });
+      return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
+    }
   }
   async function networkFetch(target, init = {}, cfg = settings) {
     const transport = cfg.transport || 'auto';
-    if (transport === 'direct') return fetch(target, init);
+    const direct = () => fetch(target, init);
+    const relay = () => proxyFetch(target, init, cfg);
+    const send = run => isPollinationsTarget(target) ? pollinationsRequest(run, init.signal) : run();
+    const isAbort = error => error?.name === 'AbortError';
+    if (transport === 'direct') return send(direct);
     if (transport === 'proxy') {
-      try { return await proxyFetch(target, init, cfg); }
+      try { return await send(relay); }
       catch (e) {
+        if (isAbort(e)) throw e;
         const err = new Error(t('proxyUnavailable'));
         err.cause = e;
         err.code = 'NETWORK';
@@ -1028,35 +1155,17 @@
       }
     }
 
-    // OpenCode does not expose a browser-readable CORS response for the models
-    // endpoint. On a public deployment, never fire a doomed cross-origin fetch
-    // first: use the site's own /api/proxy relay. This also prevents the old
-    // v2 behaviour of trying a visitor's 127.0.0.1 from an HTTPS website.
-    if (isPublicWebOrigin() && isOpenCodeTarget(target)) {
-      try { return await proxyFetch(target, init, cfg); }
-      catch (proxyError) {
-        const err = new Error(t('failedFetch'));
-        err.cause = proxyError;
-        err.code = 'NETWORK';
-        throw err;
-      }
-    }
-
-    // Bundled local server: relay first. Other providers: browser-direct first,
-    // then the configured relay if direct access is blocked.
-    if (likelyLocalServerOrigin()) {
-      try { return await proxyFetch(target, init, cfg); }
-      catch {}
-    } else {
-      try { return await fetch(target, init); }
-      catch {}
-    }
+    // Auto mode is direct-first. The configured relay is only a last resort
+    // when the browser cannot reach the provider at all.
+    try { return await send(direct); }
+    catch (e) { if (isAbort(e)) throw e; }
 
     try {
-      const response = await proxyFetch(target, init, cfg);
+      const response = await send(relay);
       toast(t('directFailedProxyOk'), 2600);
       return response;
     } catch (proxyError) {
+      if (isAbort(proxyError)) throw proxyError;
       const err = new Error(t('failedFetch'));
       err.cause = proxyError;
       err.code = 'NETWORK';
@@ -1077,6 +1186,10 @@
     }
     const images = attachments.filter(a => a.kind === 'image' && a.dataUrl);
     if (!images.length) return text;
+    if (settings.provider === 'azai') {
+      const names = images.map(a => a.name).filter(Boolean).join(', ');
+      return `${text}${text ? '\n\n' : ''}[${t('azaiImagesUnsupported')}${names ? ` ${names}` : ''}]`;
+    }
     const parts = [{ type: 'text', text: text || 'Please analyze the attached image(s).' }];
     for (const a of images) parts.push({ type:'image_url', image_url:{ url:a.dataUrl } });
     return parts;
@@ -1164,12 +1277,14 @@
     if (!response.ok && body.stream_options && [400, 404, 422].includes(response.status)) {
       const retryBody = { ...body };
       delete retryBody.stream_options;
+      try { await response.body?.cancel(); } catch {}
       response = await networkFetch(currentEndpoint(), { ...init, body:JSON.stringify(retryBody) });
       body = retryBody;
     }
     if (!response.ok && body.reasoning_effort && [400, 422].includes(response.status)) {
       const retryBody = { ...body };
       delete retryBody.reasoning_effort;
+      try { await response.body?.cancel(); } catch {}
       response = await networkFetch(currentEndpoint(), { ...init, body:JSON.stringify(retryBody) });
       if (response.ok) toast(t('thinkingUnavailable'), 2800);
     }
@@ -1194,6 +1309,9 @@
       createdAt:nowISO()
     };
     activeConversation.messages.push(userMessage);
+    if (settings.provider === 'azai' && activeConversation.messages.some(m => m.attachments?.some(a => a.kind === 'image'))) {
+      toast(t('azaiImagesUnsupported'), 2600);
+    }
     promptInput.value = '';
     pendingAttachments = [];
     renderPendingAttachments();
@@ -1224,7 +1342,7 @@
       stream:!!settings.stream
     };
     if (settings.stream) body.stream_options = { include_usage:true };
-    if (settings.thinking) body.reasoning_effort = 'medium';
+    if (settings.thinking && settings.provider !== 'azai') body.reasoning_effort = 'medium';
 
     let actualUsage = null;
     try {
@@ -1376,11 +1494,13 @@
     $('settingsModal').classList.remove('open');
     modelRefreshRequests.modal?.abort();
     modelRefreshRequests.modal = null;
+    syncSettingsToUI();
     updateModelRefreshButton(true);
   }
 
   async function saveSettingsFromModal() {
     const candidate = collectSettingsFromModal();
+    if (candidate.provider === 'azai') candidate.thinking = false;
     const nextModel = modelForConfig(candidate);
     if (!confirmModelSwitch(nextModel)) {
       syncSettingsToUI();
@@ -1457,7 +1577,7 @@
     const arr = Array.isArray(payload) ? payload : (payload?.data || payload?.models || []);
     if (!Array.isArray(arr)) throw new Error(t('invalidModels'));
     return arr.map(m => ({
-      id:String(typeof m === 'string' ? m : m?.id || m?.model || '').trim(),
+      id:String(typeof m === 'string' ? m : m?.id || m?.model || m?.name || '').trim(),
       name:String(typeof m === 'string' ? m : m?.name || m?.display_name || m?.id || m?.model || '').trim(),
       raw:m
     })).filter(m => m.id);
@@ -1558,6 +1678,8 @@
     settings.provider = provider;
     settings.apiBase = preset.endpoint;
     settings.customModel = '';
+    settings.temperature = clampNumber(settings.temperature, 0, temperatureMax(provider), settings.temperature);
+    if (provider === 'azai') settings.thinking = false;
     settings.model = provider === 'opencode'
       ? (settings.openCodeModels.some(m => m.id === settings.model) ? settings.model : settings.openCodeModels[0]?.id || preset.model)
       : preset.model;
@@ -1585,6 +1707,13 @@
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
+  function downloadText(filename, content, type = 'text/plain;charset=utf-8') {
+    const url = URL.createObjectURL(new Blob([content], { type }));
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
   async function exportConversation(conversation = activeConversation) {
     if (!conversation) return;
     downloadJson(`az-chat-${safeFileName(conversation.title)}.json`, {
@@ -1592,6 +1721,45 @@
       exportedAt:nowISO(),
       conversation
     });
+  }
+  function exportConversationMarkdown(conversation = activeConversation) {
+    if (!conversation) return;
+    const locale = settings.language === 'zh' ? 'zh-CN' : undefined;
+    const dateText = value => {
+      if (!value) return '';
+      const date = new Date(value);
+      return Number.isNaN(date.getTime()) ? '' : date.toLocaleString(locale);
+    };
+    const lines = [
+      `# ${(conversation.title || t('untitled')).replace(/[\r\n]+/g, ' ')}`,
+      '',
+      `- ${t('provider')}: ${PROVIDER_PRESETS[conversation.provider]?.name || conversation.provider || t('providerCustom')}`,
+      `- ${t('model')}: ${conversation.model || '—'}`,
+      `- ${t('updated')}: ${dateText(conversation.updatedAt) || '—'}`,
+      `- Exported: ${dateText(nowISO())}`
+    ];
+    for (const message of conversation.messages || []) {
+      const role = message.role === 'user'
+        ? (settings.language === 'zh' ? '你' : 'You')
+        : (settings.language === 'zh' ? '助手' : 'Assistant');
+      const model = message.role === 'assistant' && message.model ? ` · ${message.model}` : '';
+      lines.push('', `## ${role}${model}${message.createdAt ? ` · ${dateText(message.createdAt)}` : ''}`, '');
+      if (message.reasoning) lines.push(`### ${t('thinkingContent')}`, '', message.reasoning, '');
+      if (message.content) lines.push(message.content, '');
+      for (const attachment of message.attachments || []) {
+        const name = attachment.name || (settings.language === 'zh' ? '未命名附件' : 'Unnamed attachment');
+        if (attachment.kind === 'text') {
+          lines.push(`**${settings.language === 'zh' ? '文本附件' : 'Text attachment'}: ${name}**`, '', attachment.text || '', '');
+        } else {
+          const type = attachment.kind === 'image'
+            ? (settings.language === 'zh' ? '图片附件' : 'Image attachment')
+            : (settings.language === 'zh' ? '二进制附件' : 'Binary attachment');
+          lines.push(`- ${type}: ${name}${attachment.size ? ` (${formatBytes(attachment.size)})` : ''}`);
+        }
+      }
+      if (message.usage) lines.push(`_${t('tokens')}: ${message.usage.total_tokens || 0}${message.usage.estimated ? ' · estimated' : ''}_`, '');
+    }
+    downloadText(`az-chat-${safeFileName(conversation.title)}.md`, lines.join('\n').trimEnd() + '\n', 'text/markdown;charset=utf-8');
   }
   function exportAll() {
     downloadJson(`az-llm-chat-backup-${new Date().toISOString().slice(0,10)}.json`, {
@@ -1718,6 +1886,7 @@
   function bindEvents() {
     bindSidebarResize();
     $('settingsBtn').addEventListener('click', openSettings);
+    $('newChatTopBtn').addEventListener('click', createNewChat);
     $('toggleSidebarBtn').addEventListener('click', toggleSidebar);
     $('showSidebarBtn').addEventListener('click', toggleSidebar);
     $('menuNewChatBtn').addEventListener('click', createNewChat);
@@ -1731,6 +1900,7 @@
       }
     });
     $('settingsClose').addEventListener('click', closeSettings);
+    $('settingsCancelBtn').addEventListener('click', closeSettings);
     $('saveSettingsBtn').addEventListener('click', saveSettingsFromModal);
     $('testApiBtn').addEventListener('click', testApi);
     $('newChatBtn').addEventListener('click', createNewChat);
@@ -1762,6 +1932,7 @@
     });
     $('historySearch').addEventListener('input', renderHistory);
     $('exportOneBtn').addEventListener('click', () => exportConversation(activeConversation));
+    $('exportMarkdownBtn').addEventListener('click', () => exportConversationMarkdown(activeConversation));
     $('exportAllBtn').addEventListener('click', exportAll);
     $('importBtn').addEventListener('click', () => $('importFile').click());
     $('importFile').addEventListener('change', async e => {
@@ -1792,7 +1963,7 @@
       if (oldModel !== next && activeConversation?.messages?.length) toast(t('modelSwitchToast'), 2600);
     });
     $('temperatureQuick').addEventListener('change', async e => {
-      settings.temperature = clampNumber(e.target.value, 0, 2, settings.temperature);
+      settings.temperature = clampNumber(e.target.value, 0, temperatureMax(settings.provider), settings.temperature);
       await saveSettings(); syncSettingsToUI();
     });
     $('streamQuick').addEventListener('change', async e => {
@@ -1825,9 +1996,18 @@
       const preset = PROVIDER_PRESETS[provider] || PROVIDER_PRESETS.custom;
       $('apiBaseSetting').value = preset.endpoint;
       $('customModelSetting').value = '';
+      updateTemperatureBounds(provider, false);
+      $('temperatureSetting').value = String(clampNumber($('temperatureSetting').value, 0, temperatureMax(provider), settings.temperature));
+      updateSettingsProviderHelp(provider);
       const candidate = collectSettingsFromModal();
       buildModelOptions($('modelSetting'), provider === 'opencode' ? settings.model : preset.model, cachedModels(candidate));
       void refreshModels({ fromModal: true });
+    });
+    $('systemPromptSetting').addEventListener('input', updateSystemPromptCount);
+    $('clearSystemPromptBtn').addEventListener('click', () => {
+      $('systemPromptSetting').value = '';
+      updateSystemPromptCount();
+      $('systemPromptSetting').focus();
     });
     $('languageSetting').addEventListener('change', e => {
       const previous = settings.language;
