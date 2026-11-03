@@ -7,14 +7,14 @@
   <title>WEAPON OOBE UI</title>
 
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css" crossorigin="anonymous" />
-  <link rel="stylesheet" href="./md-renderer.css?v=2026-11-03-4" />
-  <link rel="stylesheet" href="./app.css?v=2026-11-03-4" />
+  <link rel="stylesheet" href="./md-renderer.css?v=2026-11-03-7" />
+  <link rel="stylesheet" href="./app.css?v=2026-11-03-7" />
   <script defer src="https://cdn.jsdelivr.net/npm/marked@15.0.7/lib/marked.umd.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/dompurify@3.2.6/dist/purify.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.11.1/build/highlight.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js" crossorigin="anonymous"></script>
-  <script defer src="./md-renderer.js?v=2026-11-03-4"></script>
-  <script defer src="./app.js?v=2026-11-03-4"></script>
+  <script defer src="./md-renderer.js?v=2026-11-03-7"></script>
+  <script defer src="./app.js?v=2026-11-03-7"></script>
 
 </head>
 <body>
@@ -58,7 +58,6 @@
         <select id="providerQuick" class="az-select w-120">
           <option value="pollinations">Pollinations · 免费</option>
           <option value="keylessai">KeylessAI · 免费</option>
-          <option value="opencode">OpenCode Zen</option>
           <option value="openai">OpenAI</option>
           <option value="deepseek">DeepSeek</option>
           <option value="glm">智谱 GLM</option>
@@ -152,7 +151,6 @@
           <select id="providerSetting" class="az-select">
             <option value="pollinations">Pollinations · 免费</option>
             <option value="keylessai">KeylessAI · 免费</option>
-            <option value="opencode">OpenCode Zen</option>
             <option value="openai">OpenAI</option>
             <option value="deepseek">DeepSeek</option>
             <option value="glm">智谱 GLM</option>
@@ -202,7 +200,7 @@
         <div class="setting-row">
           <label for="transportSetting" id="transportSettingLabel">Connection</label>
           <select id="transportSetting" class="az-select">
-            <option value="auto">Auto (OpenCode → same-origin relay)</option>
+            <option value="auto">Auto（直连优先，失败后走代理）</option>
             <option value="direct">Browser direct</option>
             <option value="proxy">Proxy / same-origin relay</option>
           </select>

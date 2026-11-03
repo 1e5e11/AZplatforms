@@ -1,15 +1,12 @@
 (() => {
   'use strict';
 
-  const BUILD = '2026-11-03-pollinations-4';
-  const OPENCODE_ENDPOINT = 'https://opencode.ai/zen/v1/chat/completions';
-  const OPENCODE_MODELS_ENDPOINT = 'https://opencode.ai/zen/v1/models';
+  const BUILD = '2026-11-03-pollinations-7';
   const POLLINATIONS_ENDPOINT = 'https://text.pollinations.ai/openai';
   const KEYLESSAI_ENDPOINT = 'https://keylessai.thryx.workers.dev/v1/chat/completions';
   const PROVIDER_PRESETS = {
     pollinations: { name:'Pollinations · 免费', endpoint:POLLINATIONS_ENDPOINT, model:'openai-fast' },
     keylessai: { name:'KeylessAI · 免费', endpoint:KEYLESSAI_ENDPOINT, model:'gpt-4o' },
-    opencode: { name:'OpenCode Zen', endpoint:OPENCODE_ENDPOINT, model:'mimo-v2.5-free' },
     openai: { name:'OpenAI', endpoint:'https://api.openai.com/v1/chat/completions', model:'gpt-5.2' },
     deepseek: { name:'DeepSeek', endpoint:'https://api.deepseek.com/chat/completions', model:'deepseek-chat' },
     glm: { name:'智谱 GLM', endpoint:'https://open.bigmodel.cn/api/paas/v4/chat/completions', model:'glm-4.5-flash' },
@@ -25,18 +22,6 @@
   const DEFAULT_PROXY_URL = location.protocol === 'file:' || IS_LOOPBACK_PAGE
     ? LOCAL_PROXY_DEFAULT
     : SAME_ORIGIN_PROXY_DEFAULT;
-
-  // Free OpenCode Zen models that currently use the OpenAI-compatible
-  // /chat/completions endpoint. Models using /messages or /responses are
-  // intentionally not mixed into this frontend's preset list.
-  const OPENCODE_FREE_PRESETS = [
-    { id: 'big-pickle', name: 'Big Pickle · Free' },
-    { id: 'mimo-v2.5-free', name: 'MiMo-V2.5 · Free' },
-    { id: 'ling-3.0-flash-fin-free', name: 'Ling 3.0 Flash Fin · Free' },
-    { id: 'nemotron-3-ultra-free', name: 'Nemotron 3 Ultra · Free' },
-    { id: 'nemotron-3.5-lightning-free', name: 'Nemotron 3.5 Lightning · Free' }
-  ];
-  const OPENCODE_CHAT_FREE_IDS = new Set(OPENCODE_FREE_PRESETS.map(x => x.id));
 
   const DEFAULT_SETTINGS = {
     provider: 'pollinations',
@@ -55,7 +40,6 @@
     language: 'zh',
     transport: 'direct',
     proxyUrl: DEFAULT_PROXY_URL,
-    openCodeModels: OPENCODE_FREE_PRESETS,
     providerModels: {}
   };
 
@@ -107,14 +91,15 @@
       usageActual: 'API', usageEstimated: '估算',
       input: '输入', output: '输出', total: '总计',
       draft: '草稿估算', localHistory: '本地记录',
-      providerOpenCode: 'OpenCode Zen', providerCustom: '自定义 API',
+      providerCustom: '自定义 API',
       connectionAuto: 'Auto（直连优先，失败后走代理）', connectionDirect: '浏览器直连',
       connectionProxy: '代理 / 同源 Relay', rememberNo: '否', rememberYes: '是，保存在此浏览器',
       on: '开', off: '关', themeSystem: '跟随系统', themeLight: '浅色', themeDark: '深色',
       basicSettings: '常用设置', connectionSettings: '连接与密钥', generationSettings: '生成设置', instructionsSettings: '提示词',
       resizeSidebar: '调整侧栏宽度', closeHistory: '关闭历史', showSidebar: '展开侧栏', hideSidebar: '收起侧栏', quickAdvanced: '会话与参数', exportChat: '导出 JSON', exportMarkdown: '导出 Markdown', exportAll: '导出全部',
       systemPromptNote: '此提示词会在每次对话中优先发送；保存后生效。', promptCount: '{count} / 10000', clearSystemPrompt: '清空提示词',
-      keyOptional: 'AZAI 默认无需 API Key；仅在服务端启用认证时填写。', azaiSettingNote: '模型 AZ I 仅支持文本，温度范围为 0–5，服务端固定关闭思考参数。',
+      keyOptional: 'AZAI 默认无需 API Key；仅在服务端启用认证时填写。', azaiSettingNote: '模型 AZ I 仅支持文本，温度 0–5，服务端固定关闭思考。该服务目前不返回 CORS 头，浏览器直连会被拦截；服务端为响应添加 Access-Control-Allow-Origin 即可。',
+      azaiCorsHint: 'AZAI 服务未返回 CORS 头，浏览器无法直连；服务端只需为响应添加 Access-Control-Allow-Origin: *（请求已用简单请求，无需 OPTIONS）。',
       apiKeyOptionalPlaceholder: '可选；默认无需填写', azaiDocsLink: 'AZAI API 文档',
       pollinationsKeyNote: 'Pollinations 免费接口无需 API Key，打开页面即可对话；匿名额度有频率限制。',
       keylessaiKeyNote: 'KeylessAI 免费接口无需 API Key，任意非空 Key 均可。',
@@ -169,14 +154,15 @@
       usageActual: 'API', usageEstimated: 'estimated',
       input: 'input', output: 'output', total: 'total',
       draft: 'draft est.', localHistory: 'local history',
-      providerOpenCode: 'OpenCode Zen', providerCustom: 'Custom API',
+      providerCustom: 'Custom API',
       connectionAuto: 'Auto (direct first, then relay)', connectionDirect: 'Browser direct',
       connectionProxy: 'Proxy / same-origin relay', rememberNo: 'No', rememberYes: 'Yes, in this browser',
       on: 'on', off: 'off', themeSystem: 'System', themeLight: 'Light', themeDark: 'Dark',
       basicSettings: 'Basic', connectionSettings: 'Connection & key', generationSettings: 'Generation', instructionsSettings: 'Instructions',
       resizeSidebar: 'Resize sidebar', closeHistory: 'Close history', showSidebar: 'Show sidebar', hideSidebar: 'Hide sidebar', quickAdvanced: 'Chat & parameters', exportChat: 'Export JSON', exportMarkdown: 'Export Markdown', exportAll: 'Export all',
       systemPromptNote: 'This instruction is sent before each conversation and takes effect when saved.', promptCount: '{count} / 10000', clearSystemPrompt: 'Clear prompt',
-      keyOptional: 'AZAI does not require a key by default. Enter one only if server authentication is enabled.', azaiSettingNote: 'AZ I accepts text only, supports temperature from 0 to 5, and keeps reasoning disabled on the server.',
+      keyOptional: 'AZAI does not require a key by default. Enter one only if server authentication is enabled.', azaiSettingNote: 'AZ I accepts text only, supports temperature 0–5, and keeps reasoning disabled. The service currently sends no CORS headers, so browser-direct calls are blocked; adding Access-Control-Allow-Origin to its responses is enough.',
+      azaiCorsHint: 'AZAI sends no CORS headers, so the browser cannot call it directly. Add Access-Control-Allow-Origin: * to its responses; requests already use a simple request, so no OPTIONS handler is needed.',
       apiKeyOptionalPlaceholder: 'Optional; no key by default', azaiDocsLink: 'AZAI API docs',
       pollinationsKeyNote: 'Pollinations is free and needs no API key — the page works as soon as it opens. Anonymous requests are rate limited.',
       keylessaiKeyNote: 'KeylessAI is free and needs no API key; any non-empty key is accepted.',
@@ -452,9 +438,6 @@
   async function loadSettings() {
     const row = await idbGet(STORE_SETTINGS, 'main');
     settings = { ...DEFAULT_SETTINGS, ...(row?.value || {}) };
-    settings.openCodeModels = Array.isArray(settings.openCodeModels) && settings.openCodeModels.length
-      ? settings.openCodeModels
-      : OPENCODE_FREE_PRESETS;
     if (!settings.providerModels || typeof settings.providerModels !== 'object' || Array.isArray(settings.providerModels)) {
       settings.providerModels = {};
     }
@@ -463,7 +446,13 @@
     if (!['system','light','dark'].includes(settings.theme)) settings.theme = 'system';
     settings.sidebarCollapsed = settings.sidebarCollapsed === true;
     settings.sidebarWidth = clampNumber(settings.sidebarWidth, 210, 420, 256);
-    if (!PROVIDER_PRESETS[settings.provider]) settings.provider = 'pollinations';
+    if (!PROVIDER_PRESETS[settings.provider]) {
+      // Also migrates stored settings from removed providers.
+      settings.provider = 'pollinations';
+      settings.apiBase = POLLINATIONS_ENDPOINT;
+      settings.model = 'openai-fast';
+      settings.customModel = '';
+    }
     settings.temperature = clampNumber(settings.temperature, 0, temperatureMax(settings.provider), 0.7);
     if (settings.provider === 'azai') settings.thinking = false;
     // Migrate v2's localhost proxy setting when this same file is deployed on a
@@ -584,7 +573,6 @@
   function cachedModels(cfg) {
     const cached = settings.providerModels[modelCacheKey(cfg)];
     if (Array.isArray(cached) && cached.length) return cached;
-    if (cfg.provider === 'opencode' && modelCacheKey(cfg) === modelCacheKey(DEFAULT_SETTINGS)) return settings.openCodeModels;
     const preset = PROVIDER_PRESETS[cfg.provider];
     return preset?.model ? [{ id: preset.model, name: preset.model }] : [];
   }
@@ -1049,7 +1037,7 @@
   function updateInfoPanel() {
     const keyReady = !!currentApiKey();
     const endpointReady = !!currentEndpoint();
-    const keyOptional = ['pollinations', 'keylessai', 'opencode', 'azai'].includes(settings.provider);
+    const keyOptional = ['pollinations', 'keylessai', 'azai'].includes(settings.provider);
     const configured = endpointReady && (keyReady || keyOptional);
     $('apiDot').classList.toggle('on', configured);
     $('apiStatus').textContent = configured ? t('apiConfigured') : t('apiNotConfigured');
@@ -1063,8 +1051,10 @@
     updateTokenHint();
   }
 
-  function requestHeaders(key = currentApiKey()) {
-    const headers = { 'Content-Type': 'application/json' };
+  function requestHeaders(key = currentApiKey(), provider = settings.provider) {
+    // AZ I parses JSON from a text/plain body. Keeping it a CORS "simple
+    // request" avoids the preflight OPTIONS it does not implement.
+    const headers = { 'Content-Type': provider === 'azai' ? 'text/plain' : 'application/json' };
     if (key) headers.Authorization = `Bearer ${key}`;
     return headers;
   }
@@ -1194,6 +1184,23 @@
     for (const a of images) parts.push({ type:'image_url', image_url:{ url:a.dataUrl } });
     return parts;
   }
+  // AZ I caps messages at 100, each at 16000 chars, and the whole request at
+  // 64000 chars (256 KiB body). Trim old turns rather than let the server 413.
+  function limitAzaiMessages(messages) {
+    const list = messages.slice(-100).map(m => (
+      typeof m.content === 'string' && m.content.length > 16000
+        ? { ...m, content: m.content.slice(0, 16000) }
+        : m
+    ));
+    let total = list.reduce((n, m) => n + (typeof m.content === 'string' ? m.content.length : 0), 0);
+    while (total > 64000) {
+      const index = list.findIndex((m, i) => i > 0 && m.role !== 'system');
+      if (index === -1) break;
+      const [removed] = list.splice(index, 1);
+      total -= typeof removed.content === 'string' ? removed.content.length : 0;
+    }
+    return list;
+  }
   function buildApiMessages(excludeId = '') {
     const result = [];
     if (settings.systemPrompt.trim()) result.push({ role:'system', content:settings.systemPrompt.trim() });
@@ -1203,7 +1210,7 @@
       if (m.role === 'assistant' && m.streaming && !m.content) continue;
       result.push({ role:m.role, content:apiContentForMessage(m) });
     }
-    return result;
+    return settings.provider === 'azai' ? limitAzaiMessages(result) : result;
   }
   function extractReasoning(message) {
     const value = message?.reasoning_content ?? message?.reasoning ?? '';
@@ -1230,6 +1237,12 @@
         if (!raw || raw === '[DONE]') continue;
         let payload;
         try { payload = JSON.parse(raw); } catch { continue; }
+        // AZAI (and some other servers) report mid-stream failures as a 200 SSE
+        // event with an error object instead of a non-2xx HTTP status.
+        if (payload?.error) {
+          const detail = payload.error.message || payload.error.type || JSON.stringify(payload.error);
+          throw new Error(detail);
+        }
         const usage = normalizeUsage(payload?.usage);
         if (usage) onUsage?.(usage);
         const delta = payload?.choices?.[0]?.delta;
@@ -1265,6 +1278,13 @@
     }
     detail = detail ? ` · ${detail.slice(0, 500)}` : '';
     return new Error(`HTTP ${response.status} ${response.statusText}${detail}`);
+  }
+  function displayApiError(error, provider = settings.provider) {
+    const message = error?.message || String(error);
+    if (provider === 'azai' && /failed to fetch|networkerror|load failed|fetch failed/i.test(message)) {
+      return `${message} · ${t('azaiCorsHint')}`;
+    }
+    return message;
   }
   async function executeChatRequest(body, signal) {
     const init = {
@@ -1388,7 +1408,7 @@
         };
         setBottomStatus(t('stopped'));
       } else {
-        const message = error?.message || String(error);
+        const message = displayApiError(error);
         assistantMessage.content += (assistantMessage.content ? '\n\n' : '') + `> API error: ${message}`;
         assistantMessage.usage = actualUsage || {
           prompt_tokens:inputEstimate,
@@ -1525,22 +1545,24 @@
   async function testApi() {
     const candidate = collectSettingsFromModal();
     const key = $('apiKeySetting').value.trim();
-    const endpoint = candidate.apiBase || (candidate.provider === 'opencode' ? OPENCODE_ENDPOINT : '');
+    const endpoint = candidate.apiBase || PROVIDER_PRESETS[candidate.provider]?.endpoint || '';
     const model = modelForConfig(candidate);
     if (!endpoint || !model) return toast(!endpoint ? t('missingEndpoint') : t('missingModel'));
     $('testApiBtn').disabled = true;
     setBottomStatus(t('testing'));
     try {
+      const payload = {
+        model,
+        messages:[{ role:'user', content:'Reply with exactly: OK' }],
+        temperature:0,
+        stream:false
+      };
+      // AZ I ignores generation caps; omit it so the request matches its docs.
+      if (candidate.provider !== 'azai') payload.max_tokens = 16;
       const response = await networkFetch(endpoint, {
         method:'POST',
-        headers:requestHeaders(key),
-        body:JSON.stringify({
-          model,
-          messages:[{ role:'user', content:'Reply with exactly: OK' }],
-          temperature:0,
-          stream:false,
-          max_tokens:16
-        })
+        headers:requestHeaders(key, candidate.provider),
+        body:JSON.stringify(payload)
       }, candidate);
       if (!response.ok) throw await apiError(response);
       const data = await response.json();
@@ -1550,29 +1572,13 @@
       setBottomStatus(`${t('apiTestOk')}${usage ? ` · ${formatUsage(usage)}` : ''}`);
     } catch (e) {
       toast(t('apiTestFailed'), 2600);
-      setBottomStatus(`${t('apiTestFailed')} · ${e.message}`);
+      setBottomStatus(`${t('apiTestFailed')} · ${displayApiError(e, candidate.provider)}`);
     } finally {
       $('testApiBtn').disabled = false;
       updateInfoPanel();
     }
   }
 
-  function isZeroPrice(value) {
-    if (value === 0 || value === '0' || value === '0.0') return true;
-    if (typeof value === 'string' && /^(?:free|\$?0(?:\.0+)?)$/i.test(value.trim())) return true;
-    return false;
-  }
-  function looksFreeModel(m) {
-    const id = String(m?.id || m?.model || '').toLowerCase();
-    const name = String(m?.name || m?.display_name || '').toLowerCase();
-    if (id.includes('free') || name.includes('free') || id === 'big-pickle') return true;
-    const pricing = m?.pricing || m?.price || m?.cost;
-    if (pricing && typeof pricing === 'object') {
-      const vals = Object.values(pricing).filter(v => v !== null && v !== undefined);
-      if (vals.length && vals.every(isZeroPrice)) return true;
-    }
-    return false;
-  }
   function normalizeModelList(payload) {
     const arr = Array.isArray(payload) ? payload : (payload?.data || payload?.models || []);
     if (!Array.isArray(arr)) throw new Error(t('invalidModels'));
@@ -1581,11 +1587,6 @@
       name:String(typeof m === 'string' ? m : m?.name || m?.display_name || m?.id || m?.model || '').trim(),
       raw:m
     })).filter(m => m.id);
-  }
-  function looksChatCompletionsModel(m) {
-    if (OPENCODE_CHAT_FREE_IDS.has(m.id)) return true;
-    const raw = JSON.stringify(m.raw || m).toLowerCase();
-    return raw.includes('chat/completions') || raw.includes('openai-compatible');
   }
   function modelRefreshSignature(cfg, key) {
     return JSON.stringify([cfg.provider, cfg.apiBase, cfg.transport, cfg.proxyUrl, key]);
@@ -1635,17 +1636,10 @@
       const all = normalizeModelList(data);
       if (!all.length) throw new Error(t('invalidModels'));
       const merged = new Map();
-      if (cfg.provider === 'opencode') {
-        OPENCODE_FREE_PRESETS.forEach(m => merged.set(m.id, m));
-        const free = all.filter(m => looksFreeModel(m.raw) && looksChatCompletionsModel(m));
-        for (const m of free) merged.set(m.id, { id: m.id, name: `${m.name || m.id}${/free/i.test(m.name) ? '' : ' · Free'}` });
-      } else {
-        for (const m of all) merged.set(m.id, { id: m.id, name: m.name || m.id });
-      }
+      for (const m of all) merged.set(m.id, { id: m.id, name: m.name || m.id });
       const models = [...merged.values()].sort((a,b) => a.name.localeCompare(b.name));
       if (!isCurrent()) return;
       settings.providerModels[modelCacheKey(cfg)] = models;
-      if (cfg.provider === 'opencode' && endpoint === OPENCODE_MODELS_ENDPOINT) settings.openCodeModels = models;
       await saveSettings();
       if (!isCurrent()) return;
       // Keep the chosen model and any unsaved settings while replacing options.
@@ -1662,7 +1656,7 @@
       setBottomStatus(message);
     } catch (e) {
       if (!isCurrent()) return;
-      setBottomStatus(`${t('refreshFallback')} · ${e.message}`);
+      setBottomStatus(`${t('refreshFallback')} · ${displayApiError(e, cfg.provider)}`);
       toast(t('refreshFallback'), 2600);
     } finally {
       if (modelRefreshRequests[context] === controller) {
@@ -1680,9 +1674,7 @@
     settings.customModel = '';
     settings.temperature = clampNumber(settings.temperature, 0, temperatureMax(provider), settings.temperature);
     if (provider === 'azai') settings.thinking = false;
-    settings.model = provider === 'opencode'
-      ? (settings.openCodeModels.some(m => m.id === settings.model) ? settings.model : settings.openCodeModels[0]?.id || preset.model)
-      : preset.model;
+    settings.model = preset.model;
     const nextModel = currentModel();
     if (shouldWarnModelSwitch(nextModel) && !confirm(t('modelSwitchWarn'))) {
       settings = previous;
@@ -2000,7 +1992,7 @@
       $('temperatureSetting').value = String(clampNumber($('temperatureSetting').value, 0, temperatureMax(provider), settings.temperature));
       updateSettingsProviderHelp(provider);
       const candidate = collectSettingsFromModal();
-      buildModelOptions($('modelSetting'), provider === 'opencode' ? settings.model : preset.model, cachedModels(candidate));
+      buildModelOptions($('modelSetting'), preset.model, cachedModels(candidate));
       void refreshModels({ fromModal: true });
     });
     $('systemPromptSetting').addEventListener('input', updateSystemPromptCount);
