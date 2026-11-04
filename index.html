@@ -1,355 +1,499 @@
-<html>
-
+<!DOCTYPE html>
+<html lang="zh-CN">
 <head>
-    <link rel="shortcut icon" href="https://ssssssss.eu.org/az-128.ico" type="image/x-icon" />
-    <meta charset="utf-8">
-    <title>啊这软件园</title>
-    <style type="text/css">
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            transition: 0.2s;
-        }
-
-        html,
-        body {
-            width: 100%;
-            height: 100%;
-        }
-
-        body {
-            font-family: 'Times New Roman', 宋体, serif, 'Liberation Mono';
-            overflow: hidden;
-            cursor: default;
-            user-select: none;
-            color: var(--wzys);
-        }
-
-        .vfr {
-            position: absolute;
-        }
-
-        .az {
-            color: var(--bjsdfz);
-        }
-
-        .red-kuang {
-            transform: translateZ(0);
-            position: absolute;
-            border: 0;
-            border-radius: .15em;
-            background-color: var(--hanbj);
-            box-shadow: 0 1px 9px var(--bjsdfz-a);
-            overflow: auto;
-        }
-
-        .red-kuang::before {
-            content: "";
-            background: inherit;
-            background-size: cover;
-            filter: blur(8px);
-            backdrop-filter: url(#glass) blur(1px);
-            z-index: -1;
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-        }
-
-        .bj {
-            position: fixed;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background-color: var(--ymbj);
-            overflow: hidden;
-        }
-
-        .title-bar {
-            position: fixed;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 90px;
-            z-index: 5;
-            background-color: rgba(255, 255, 255, .35);
-            backdrop-filter: blur(15px);
-            -webkit-backdrop-filter: blur(15px);
-            box-shadow: 0 1px 9px var(--bjsdfz-a);
-            border-radius: 0;
-            overflow: hidden;
-            border-bottom: 1px solid var(--bjsdfz-a);
-            transition: 0.2s, backdrop-filter 0s, -webkit-backdrop-filter 0s;
-        }
-
-        .title-bar .title-txt {
-            position: absolute;
-            left: 0;
-            right: 0;
-            top: 0;
-            margin: auto;
-            width: 100%;
-            height: 90px;
-            line-height: 90px;
-            text-align: center;
-            font-size: 28px;
-            color: var(--bjsdfz);
-            letter-spacing: 2px;
-            text-shadow: 0 0 12px var(--bjsdfz-a);
-        }
-
-        .cardarea {
-            position: fixed;
-            left: 0;
-            right: 0;
-            top: 0;
-            bottom: 0;
-            z-index: 4;
-            overflow-y: auto;
-            overflow-x: hidden;
-            display: grid;
-            grid-template-columns: repeat(auto-fill, var(--card-w));
-            gap: var(--card-gap);
-            justify-content: center;
-            align-content: start;
-            padding: 100px var(--card-pad) var(--card-pad);
-        }
-
-        .cardarea .card {
-            transform: translateZ(0);
-            position: relative;
-            width: var(--card-w);
-            height: var(--card-h);
-            border-radius: .15em;
-            border: 1px solid var(--bjsdfz-a);
-            background-color: var(--hanbj);
-            box-shadow: 0 1px 9px var(--bjsdfz-a);
-            backdrop-filter: blur(15px);
-            overflow: hidden;
-        }
-
-        .cardarea .card::before {
-            content: "";
-            position: absolute;
-            inset: 0;
-            background: inherit;
-            background-size: cover;
-            filter: blur(8px);
-            backdrop-filter: url(#glass) blur(1px);
-            z-index: -1;
-        }
-
-        .cardarea .card:hover {
-            box-shadow: 0 2px 14px var(--bjsdfz-a);
-        }
-
-        .card .t {
-            position: absolute;
-            top: 18px;
-            left: 20px;
-            right: 130px;
-            font-size: 26px;
-            color: var(--bjsdfz);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .card .s {
-            position: absolute;
-            top: 56px;
-            left: 20px;
-            right: 130px;
-            font-size: 16px;
-            color: var(--wzys-a);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .card .d {
-            position: absolute;
-            top: 88px;
-            left: 20px;
-            right: 130px;
-            height: 88px;
-            font-size: 16px;
-            line-height: 24px;
-            color: var(--wzys);
-            overflow: auto;
-        }
-
-        .card .btn {
-            position: absolute;
-            width: 92px;
-            height: 36px;
-            border-radius: .15em;
-            border: 2px solid var(--bjsdfz);
-            background: transparent;
-            text-align: center;
-            line-height: 36px;
-            color: var(--bjsdfz);
-            cursor: default;
-            font-size: 16px;
-            font-family: inherit;
-            font-style: normal;
-            text-indent: 0;
-        }
-
-        .card .btn:hover {
-            background: var(--bjsdfz);
-            color: #fff;
-            box-shadow: 0 1px 5px var(--bjsdfz);
-            transition: .3s;
-        }
-
-        .card .btn:active {
-            transform: scale(.92);
-            transition: .1s;
-        }
-
-        .card .btn.o {
-            right: 20px;
-            top: 22px;
-        }
-
-        .card .btn.g {
-            right: 20px;
-            top: 72px;
-        }
-
-        .card .ai {
-            position: absolute;
-            left: 20px;
-            bottom: 38px;
-            display: none;
-            font-size: 14px;
-            color: var(--bjsdfz);
-            border: 1px solid var(--bjsdfz-a);
-            border-radius: .15em;
-            padding: 1px 8px;
-            line-height: 22px;
-        }
-
-        .card .ai.on {
-            display: block;
-        }
-
-        .card .time {
-            position: absolute;
-            left: 20px;
-            bottom: 14px;
-            font-size: 12px;
-            color: var(--wzys-a);
-        }
-
-        .ldd {
-            position: fixed;
-            top: 96px;
-            left: 0;
-            right: 0;
-            margin: auto;
-            width: 150px;
-            height: 2px;
-            z-index: 114;
-            box-shadow: 0 3px 15px rgba(0, 0, 0, .5);
-            border-radius: 50%;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            overflow: hidden;
-            transition: .4s;
-            opacity: 0;
-        }
-
-        .ldd::before {
-            content: "";
-            position: absolute;
-            inset: 0;
-            background: linear-gradient(90deg, transparent, var(--bjsdfz), transparent);
-            backdrop-filter: blur(1px);
-            filter: blur(1px);
-        }
-
-        *::-webkit-scrollbar {
-            width: 14px;
-            height: 14px;
-            border-radius: .15em;
-        }
-
-        *::-webkit-scrollbar-track {
-            transition: cubic-bezier(0.5, 0, 0.5, 1) .25s;
-            background-color: rgba(255, 255, 255, 0);
-            border-radius: 5px;
-        }
-
-        *::-webkit-scrollbar-thumb {
-            transition: cubic-bezier(0.5, 0, 0.5, 1) .25s;
-            display: block;
-            background: rgba(0, 0, 0, .5);
-            background-clip: padding-box;
-            border: 5px solid transparent;
-            border-radius: .15em;
-            background-color: var(--bjsdfz-a);
-        }
-
-        *::-webkit-scrollbar-thumb:hover {
-            transition: cubic-bezier(0.5, 0, 0.5, 1) .25s;
-            display: block;
-            border: 4px solid transparent;
-            background-color: var(--bjsdfz-a);
-        }
-
-        *::-webkit-scrollbar-button {
-            background-color: #eee;
-            display: none;
-        }
-
-        *::-webkit-scrollbar-corner {
-            background-color: rgba(0, 0, 0, 0);
-        }
-    </style>
-    <style id="szys">
-        :root {
-            --bjsdfz: #7c0a21;
-            --bjsdfz-a: #7c0a2164;
-            --wzys: black;
-            --wzys-a: rgba(128, 128, 128, .7);
-            --hanbj: rgba(255, 255, 255, .6);
-            --ymbj: #ffffff;
-            --card-w: 400px;
-            --card-h: 200px;
-            --card-gap: 16px;
-            --card-pad: 8px;
-        }
-    </style>
-    <script type="text/javascript" src="app.js"></script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>啊这AI（AZAI）— 探索智能的边界</title>
+<meta name="description" content="啊这AI（AZAI）是一个专注于 Agent 与上下文系统的学习型小组，2026 年成立于北京。不追 SOTA，专注研究与新模式的探索，产品为大语言模型 AZ I。">
+<meta name="theme-color" content="#171315">
+<meta property="og:type" content="website">
+<meta property="og:title" content="啊这AI（AZAI）— 探索智能的边界">
+<meta property="og:description" content="一个专注于 Agent 与上下文系统的学习型小组，2026 年成立于北京。">
+<link rel="icon" href="assets/img/az-i.png" type="image/png">
+<link rel="apple-touch-icon" href="assets/img/az-i.png">
+<link rel="stylesheet" href="assets/css/style.css">
 </head>
+<body>
 
-<body onselectstart="return false" onbeforecopy="return false">
-    <div class="bj">
+<a class="skip" href="#about">跳到主要内容</a>
+
+<svg class="sprite" aria-hidden="true" focusable="false" width="0" height="0">
+  <symbol id="i-arrow" viewBox="0 0 24 24">
+    <path d="M6 18 L18 6 M9 6 H18 V15" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square"/>
+  </symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24">
+    <path d="M12 21c0 0 7-6.3 7-11a7 7 0 1 0-14 0c0 4.7 7 11 7 11Z" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    <circle cx="12" cy="10" r="2.6" fill="none" stroke="currentColor" stroke-width="1.5"/>
+  </symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24">
+    <path d="M8.4 4.5 6.2 6.7c-.7.7-.9 1.7-.5 2.6a15.5 15.5 0 0 0 8.9 8.9c1 .4 2 .2 2.6-.5l2.2-2.2-3.7-2.1-1.6 1.6a12 12 0 0 1-4.6-4.6l1.6-1.6-2.1-3.7Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+  </symbol>
+</svg>
+
+<!-- 固定背景层：随滚动在各版块之间交叉淡入 -->
+<div class="page-bg" aria-hidden="true">
+  <div class="bg bg--hero is-active" data-bg="top">
+    <span class="bg__grid"></span>
+  </div>
+  <div class="bg bg--about" data-bg="about"></div>
+  <div class="bg bg--culture" data-bg="culture"><span class="bg__grid"></span></div>
+  <div class="bg bg--agi" data-bg="agi"><span class="bg__grid"></span></div>
+  <div class="bg bg--product" data-bg="product"></div>
+  <div class="bg bg--map" data-bg="map"></div>
+  <div class="bg bg--news" data-bg="news"></div>
+  <div class="bg bg--careers" data-bg="careers"></div>
+  <div class="bg bg--contact" data-bg="contact"><span class="bg__grid"></span></div>
+</div>
+
+<!-- 左侧导航 -->
+<header class="rail" id="rail" data-tone="dark">
+  <div class="rail__inner">
+    <a class="brand" href="#top" aria-label="啊这AI 首页">
+      <img class="brand__mark" src="assets/img/az-i.png" alt="" width="30" height="30">
+      <span class="brand__word">啊这AI</span>
+    </a>
+
+    <nav class="rail__nav" aria-label="主导航">
+      <a class="rail__link is-active" href="#top" data-target="top"><span>首页</span></a>
+      <a class="rail__link" href="#about" data-target="about"><span>关于我们</span></a>
+      <a class="rail__link" href="#culture" data-target="culture"><span>啊这文化</span></a>
+      <a class="rail__link" href="#agi" data-target="agi"><span>AGI 探索</span></a>
+      <a class="rail__link" href="#product" data-target="product"><span>产品 AZ I</span></a>
+      <a class="rail__link" href="#map" data-target="map"><span>学习地图</span></a>
+      <a class="rail__link" href="#news" data-target="news"><span>最新资讯</span></a>
+      <a class="rail__link" href="#careers" data-target="careers"><span>加入我们</span></a>
+      <a class="rail__link" href="#contact" data-target="contact"><span>联系我们</span></a>
+    </nav>
+
+    <div class="rail__foot">
+      <a class="rail__blog" href="https://ssssssss.eu.org/AZpresented/index.html#/" target="_blank" rel="noopener">
+        <span>BLOG</span>
+        <svg aria-hidden="true"><use href="#i-arrow"/></svg>
+      </a>
+    </div>
+  </div>
+
+  <button class="burger" id="burger" type="button" aria-expanded="false" aria-controls="mobile-nav" aria-label="打开菜单">
+    <span></span><span></span>
+  </button>
+</header>
+
+<nav class="mobile-nav" id="mobile-nav" aria-label="移动端导航">
+  <a href="#top" data-target="top"><span class="mobile-nav__no">00</span>首页</a>
+  <a href="#about" data-target="about"><span class="mobile-nav__no">01</span>关于我们</a>
+  <a href="#culture" data-target="culture"><span class="mobile-nav__no">02</span>啊这文化</a>
+  <a href="#agi" data-target="agi"><span class="mobile-nav__no">03</span>AGI 探索</a>
+  <a href="#product" data-target="product"><span class="mobile-nav__no">04</span>产品 AZ I</a>
+  <a href="#map" data-target="map"><span class="mobile-nav__no">05</span>学习地图</a>
+  <a href="#news" data-target="news"><span class="mobile-nav__no">06</span>最新资讯</a>
+  <a href="#careers" data-target="careers"><span class="mobile-nav__no">07</span>加入我们</a>
+  <a href="#contact" data-target="contact"><span class="mobile-nav__no">08</span>联系我们</a>
+  <a class="mobile-nav__blog" href="https://ssssssss.eu.org/AZpresented/index.html#/" target="_blank" rel="noopener">
+    AZ presented 博客
+    <svg aria-hidden="true"><use href="#i-arrow"/></svg>
+  </a>
+</nav>
+
+<main id="main">
+
+  <!-- 首屏 -->
+  <section class="hero" id="top" data-tone="dark">
+    <div class="hero__media" aria-hidden="true">
+      <span class="hero__rays"></span>
+      <span class="hero__rings"></span>
+      <span class="hero__glow"></span>
+      <span class="hero__vignette"></span>
     </div>
 
-    <div class="title-bar">
-        <div class="title-txt">啊这软件园</div>
+    <div class="hero__content">
+      <p class="hero__eyebrow">AZAI <span aria-hidden="true">/</span> Agent · 上下文 · 评测</p>
+      <h1 class="hero__title">
+        <span>啊这AI</span><span class="hero__dot" aria-hidden="true">·</span><span>探索智能的边界</span>
+      </h1>
+      <p class="hero__sub">一个专注于 Agent 与上下文系统的学习型小组，2026 年成立于北京。</p>
     </div>
-    <div class="ldd" id="ldd"></div>
 
-    <div class="cardarea" id="cardarea"></div>
+    <div class="hero__foot">
+      <p class="hero__place">北京 <span aria-hidden="true">/</span> BEIJING</p>
+      <a class="hero__scroll" href="#about">
+        <span>向下浏览</span>
+        <span class="hero__scroll-line" aria-hidden="true"></span>
+      </a>
+    </div>
+  </section>
 
-    <svg style="display:none">
-        <defs>
-            <filter id="glass" x="0%" y="0%" width="100%" height="100%">
-                <feTurbulence type="fractalNoise" baseFrequency="0.008 0.008" numOctaves="2" seed="114514" result="noise" />
-                <feGaussianBlur in="noise" stdDeviation="2" result="blurred" />
-                <feDisplacementMap in="SourceGraphic" in2="blurred" scale="20" xChannelSelector="R" yChannelSelector="G" />
-            </filter>
-        </defs>
-    </svg>
+  <!-- 关于我们 -->
+  <section class="section section--about" id="about" data-tone="light">
+    <div class="wrap">
+      <p class="eyebrow reveal"><span class="eyebrow__no">01</span><span class="eyebrow__rule" aria-hidden="true"></span>关于我们</p>
 
+      <div class="about">
+        <div class="about__main reveal" style="--d:.06s">
+          <h2 class="display">关于啊这AI</h2>
+          <p class="lede">啊这AI 不是一家基础模型工厂。我们不追 SOTA，更专注于研究与新模式的探索——围绕 Agent 与上下文系统，把学习做成一条窄而深的闭环，再把它收敛成可以用的东西。</p>
+          <p class="body">方法很朴素——选定一个具体问题，读透相关文献，做复现级实验，写出可以被人复核的结论，然后进入下一个问题。范围小，但每个问题都要走完。基础模型相关的工作，我们只做理解、选型与复现级实验。</p>
+        </div>
+
+        <dl class="stats reveal" style="--d:.14s">
+          <div class="stat">
+            <dd class="stat__value"><span class="stat__num">2026</span><span class="stat__unit">年</span></dd>
+            <dt class="stat__label">成立于北京</dt>
+          </div>
+          <div class="stat">
+            <dd class="stat__value"><span class="stat__num" data-count="6" data-pad="2">06</span><span class="stat__unit">个</span></dd>
+            <dt class="stat__label">近期学习主题</dt>
+          </div>
+          <div class="stat">
+            <dd class="stat__value"><span class="stat__num" data-count="1" data-pad="2">01</span><span class="stat__unit">座</span></dd>
+            <dt class="stat__label">北京办公区</dt>
+          </div>
+        </dl>
+      </div>
+    </div>
+  </section>
+
+  <!-- 啊这文化 -->
+  <section class="section section--culture" id="culture" data-tone="dark">
+    <div class="wrap">
+      <div class="section__head section__head--dark">
+        <p class="eyebrow eyebrow--dark reveal"><span class="eyebrow__no">02</span><span class="eyebrow__rule" aria-hidden="true"></span>啊这文化</p>
+        <h2 class="display display--dark reveal" style="--d:.06s">啊这文化</h2>
+        <p class="section__note reveal" style="--d:.12s">四个词，是我们做研究的方式，也是我们选择彼此的理由。</p>
+      </div>
+
+      <ul class="values reveal" style="--d:.18s">
+        <li class="value">
+          <div class="value__head">
+            <span class="value__no">01</span>
+            <h3 class="value__word">严谨</h3>
+            <p class="value__en">RIGOR</p>
+          </div>
+          <p class="value__desc">任何结论都要能被复现、被质疑、被推翻。我们接受自己出错，但不接受不认真的出错。</p>
+        </li>
+        <li class="value">
+          <div class="value__head">
+            <span class="value__no">02</span>
+            <h3 class="value__word">有趣</h3>
+            <p class="value__en">DELIGHT</p>
+          </div>
+          <p class="value__desc">研究不该是苦役。最好的问题，常常来自一句「如果……会怎样？」。</p>
+        </li>
+        <li class="value">
+          <div class="value__head">
+            <span class="value__no">03</span>
+            <h3 class="value__word">好奇</h3>
+            <p class="value__en">CURIOSITY</p>
+          </div>
+          <p class="value__desc">我们对「不知道」保持诚实。承认边界，是向前走的第一步。</p>
+        </li>
+        <li class="value">
+          <div class="value__head">
+            <span class="value__no">04</span>
+            <h3 class="value__word">专业</h3>
+            <p class="value__en">CRAFT</p>
+          </div>
+          <p class="value__desc">把复杂的事情做对，再把它讲简单。对细节的耐心，是长期主义最朴素的样子。</p>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- AGI 探索 -->
+  <section class="section section--agi" id="agi" data-tone="dark">
+    <div class="wrap">
+      <p class="eyebrow eyebrow--dark reveal"><span class="eyebrow__no">03</span><span class="eyebrow__rule" aria-hidden="true"></span>AGI 探索</p>
+
+      <blockquote class="agi__quote reveal" style="--d:.06s">
+        <p>通用人工智能不是一次发布，<br>而是一条需要被长期验证的路径。</p>
+      </blockquote>
+
+      <div class="agi__foot reveal" style="--d:.14s">
+        <p class="agi__note">我们把它当作学习的北极星——不承诺时间表，只承诺认真对待每一个可以被检验的问题。AGI 不是一个可以提前宣布的终点，而是我们判断一个题目是否值得学下去的坐标系。</p>
+
+        <ul class="agi__tags">
+          <li><span>长期</span><em>LONG-HORIZON</em></li>
+          <li><span>可验证</span><em>FALSIFIABLE</em></li>
+          <li><span>开放</span><em>OPEN</em></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 产品 -->
+  <section class="section section--product" id="product" data-tone="light">
+    <div class="wrap">
+      <div class="product reveal">
+        <div class="product__mark" aria-hidden="true">
+          <img src="assets/img/az-i.png" alt="" width="256" height="256" loading="lazy">
+        </div>
+
+        <div class="product__body">
+          <p class="eyebrow eyebrow--dark"><span class="eyebrow__no">04</span><span class="eyebrow__rule" aria-hidden="true"></span>产品</p>
+          <h2 class="product__name">AZ I</h2>
+          <p class="product__tag">一个大语言模型，也是学习闭环的产物。</p>
+          <p class="product__desc">AZ I 把我们读过的论文、跑过的实验和评测收敛成一个可以直接调用的模型。它不参与参数规模的竞赛，而是把上下文、工具调用与可评测性放在第一位。</p>
+
+          <div class="product__links">
+            <a class="btn btn--primary" href="https://ai.realgeneral.eu.org/" target="_blank" rel="noopener">
+              开始使用
+              <svg aria-hidden="true"><use href="#i-arrow"/></svg>
+            </a>
+            <a class="btn" href="https://ssssssss.eu.org/md/#src=https%3A%2F%2Fssssssss.eu.org%2Fai%2Fdocs%2FAZ%2520I%2Fapi.md&amp;page=1" target="_blank" rel="noopener">API 文档</a>
+            <a class="btn" href="https://ssssssss.eu.org/md/#src=https%3A%2F%2Fssssssss.eu.org%2Fai%2Fdocs%2FAZ%2520I%2Ftech.md&amp;page=1" target="_blank" rel="noopener">技术文档</a>
+          </div>
+
+          <p class="product__meta">ai.realgeneral.eu.org</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 学习地图 -->
+  <section class="section section--map" id="map" data-tone="light">
+    <div class="wrap">
+      <div class="section__head section__head--row">
+        <div>
+          <p class="eyebrow reveal"><span class="eyebrow__no">05</span><span class="eyebrow__rule" aria-hidden="true"></span>学习地图</p>
+          <h2 class="display reveal" style="--d:.06s">一张学习地图，<br>不是一张编制表</h2>
+        </div>
+        <p class="section__note section__note--right reveal" style="--d:.12s">它决定我们读什么、分享什么，而不是要招多少人。实际人数很少，很多方向由一个人兼做，或者只做调研。</p>
+      </div>
+
+      <p class="map__label reveal" style="--d:.14s">近期重点 <span>NEAR-TERM FOCUS</span></p>
+
+      <ol class="focus">
+        <li class="reveal" style="--d:.02s">
+          <span class="focus__no">01</span>
+          <h3 class="focus__title">Agent 任务与评测</h3>
+          <p class="focus__desc">任务如何被拆解、规划与验证；用稳定的评测判断哪些范式真的成立。</p>
+        </li>
+        <li class="reveal" style="--d:.06s">
+          <span class="focus__no">02</span>
+          <h3 class="focus__title">上下文工程</h3>
+          <p class="focus__desc">上下文如何组织、压缩与检索——它往往比模型本身更决定能力上限。</p>
+        </li>
+        <li class="reveal" style="--d:.10s">
+          <span class="focus__no">03</span>
+          <h3 class="focus__title">Skill / 工具接入</h3>
+          <p class="focus__desc">工具描述、调用约定与失败恢复，是能力真正落地的地方。</p>
+        </li>
+        <li class="reveal" style="--d:.14s">
+          <span class="focus__no">04</span>
+          <h3 class="focus__title">Harness 实验闭环</h3>
+          <p class="focus__desc">可复现的环境、判据与回归，比一次跑分更值得信赖。</p>
+        </li>
+        <li class="reveal" style="--d:.18s">
+          <span class="focus__no">05</span>
+          <h3 class="focus__title">安全边界</h3>
+          <p class="focus__desc">权限、注入与越界行为，需要在设计阶段就被约束，而不是事后补救。</p>
+        </li>
+        <li class="reveal" style="--d:.22s">
+          <span class="focus__no">06</span>
+          <h3 class="focus__title">Lean 形式化验证</h3>
+          <p class="focus__desc">对关键协议与不变量做形式化证明，把「应该没问题」变成「可以证明」。</p>
+        </li>
+      </ol>
+
+      <p class="focus__foot reveal" style="--d:.24s">我们先用一个最小任务集，把「学习 — 实验 — 评测」的闭环跑通，再逐步扩大范围。</p>
+
+      <div class="capmap reveal" style="--d:.1s">
+        <div class="capmap__head">
+          <p class="map__label">相邻能力 <span>CAPABILITY MAP</span></p>
+          <p class="capmap__note">这些坐标用来判断做 Agent 与上下文系统时需要理解什么，不是岗位清单。</p>
+        </div>
+        <ul class="capmap__list">
+          <li><span>Transformer</span><em>架构</em></li>
+          <li><span>注意力机制</span><em>ATTENTION</em></li>
+          <li><span>蒸馏</span><em>DISTILLATION</em></li>
+          <li><span>Token</span><em>切分与计费</em></li>
+          <li><span>基础设施</span><em>INFRA</em></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 最新资讯 -->
+  <section class="section section--news" id="news" data-tone="light">
+    <div class="wrap">
+      <div class="section__head section__head--row">
+        <div>
+          <p class="eyebrow reveal"><span class="eyebrow__no">06</span><span class="eyebrow__rule" aria-hidden="true"></span>最新资讯</p>
+          <h2 class="display reveal" style="--d:.06s">来自啊这的最新消息</h2>
+        </div>
+        <a class="more reveal" style="--d:.12s" href="https://ssssssss.eu.org/AZpresented/index.html#/" target="_blank" rel="noopener">
+          <span>查看全部</span>
+          <span class="more__icon" aria-hidden="true"><svg><use href="#i-arrow"/></svg></span>
+        </a>
+      </div>
+
+      <p class="section__note reveal" style="--d:.12s">我们在 <a class="inline-link" href="https://ssssssss.eu.org/AZpresented/index.html#/" target="_blank" rel="noopener">AZ presented</a> 上持续记录研究随笔、数学笔记与每日科技观察。</p>
+
+      <div class="posts">
+        <a class="post" href="https://ssssssss.eu.org/AZpresented/index.html#/post/20261104-dd2f72" target="_blank" rel="noopener">
+          <div class="post__meta">
+            <span class="post__cat">数学</span>
+            <time datetime="2026-11-04">2026.11.04</time>
+          </div>
+          <h3 class="post__title">伽罗瓦理论为什么五次方程无根式解</h3>
+          <p class="post__excerpt">五次及更高次的一般代数方程之所以没有「求根公式」，背后是伽罗瓦留下的群论思想——把对方程「根本身的计算」，转化为研究「根与根之间的对称性结构」。</p>
+          <div class="post__foot">
+            <span>27 分钟阅读</span>
+            <svg aria-hidden="true"><use href="#i-arrow"/></svg>
+          </div>
+        </a>
+
+        <a class="post" href="https://ssssssss.eu.org/AZpresented/index.html#/post/20-8a02" target="_blank" rel="noopener">
+          <div class="post__meta">
+            <span class="post__cat">数学</span>
+            <time datetime="2026-11-04">2026.11.04</time>
+          </div>
+          <h3 class="post__title">魔方上帝之数 20 步的证明</h3>
+          <p class="post__excerpt">任意合法的三阶魔方状态，在半转度量下最多只需 20 步即可复原。这一紧确上界被称为魔方的「上帝之数」。</p>
+          <div class="post__foot">
+            <span>12 分钟阅读</span>
+            <svg aria-hidden="true"><use href="#i-arrow"/></svg>
+          </div>
+        </a>
+
+        <a class="post" href="https://ssssssss.eu.org/AZpresented/index.html#/post/20261104-3bd27c" target="_blank" rel="noopener">
+          <div class="post__meta">
+            <span class="post__cat">数学</span>
+            <time datetime="2026-11-04">2026.11.04</time>
+          </div>
+          <h3 class="post__title">二次互反律的十种优雅证明</h3>
+          <p class="post__excerpt">二次互反律由欧拉和勒让德猜想，高斯在 1796 年首次严格证明，并称之为「算术理论的黄金定理」。这篇文章给出十种优雅的证明路径。</p>
+          <div class="post__foot">
+            <span>30 分钟阅读</span>
+            <svg aria-hidden="true"><use href="#i-arrow"/></svg>
+          </div>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- 加入我们 -->
+  <section class="section section--careers" id="careers" data-tone="light">
+    <div class="wrap">
+      <div class="section__head section__head--row">
+        <div>
+          <p class="eyebrow reveal"><span class="eyebrow__no">07</span><span class="eyebrow__rule" aria-hidden="true"></span>加入我们</p>
+          <h2 class="display reveal" style="--d:.06s">我们在找<br>一起做研究的人</h2>
+        </div>
+        <p class="section__note section__note--right reveal" style="--d:.12s">我们的人很少，所以每个位置都很具体：你要真的对某个方向好奇，也愿意把它做深。</p>
+      </div>
+
+      <ul class="tracks reveal" style="--d:.16s">
+        <li>
+          <span class="tracks__no">Ⅰ</span>
+          <h3>基础设施</h3>
+          <p>INFRA</p>
+        </li>
+        <li>
+          <span class="tracks__no">Ⅱ</span>
+          <h3>推理应用与产品</h3>
+          <p>PRODUCT</p>
+        </li>
+        <li>
+          <span class="tracks__no">Ⅲ</span>
+          <h3>研究与训练</h3>
+          <p>RESEARCH</p>
+        </li>
+      </ul>
+
+      <div class="careers__foot reveal" style="--d:.2s">
+        <a class="more" href="https://ssssssss.eu.org/AZpresented/index.html#/post/ai" target="_blank" rel="noopener">
+          <span>查看岗位一览</span>
+          <span class="more__icon" aria-hidden="true"><svg><use href="#i-arrow"/></svg></span>
+        </a>
+        <p class="careers__note">岗位一览是能力地图，不是编制表；实际名额很少，很多方向由一个人兼做。地点以北京为主，部分方向可线上混合。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 联系我们 -->
+  <section class="section section--contact" id="contact" data-tone="dark">
+    <div class="wrap">
+      <div class="section__head section__head--dark">
+        <p class="eyebrow eyebrow--dark reveal"><span class="eyebrow__no">08</span><span class="eyebrow__rule" aria-hidden="true"></span>联系我们</p>
+        <h2 class="display display--dark reveal" style="--d:.06s">联系我们</h2>
+        <p class="section__note reveal" style="--d:.12s">我们目前只有北京一处办公区。</p>
+      </div>
+
+      <div class="office reveal" style="--d:.18s">
+        <div class="office__media" aria-hidden="true">
+          <span class="office__grid"></span>
+          <span class="office__pin"><svg><use href="#i-pin"/></svg></span>
+          <span class="office__label">BEIJING</span>
+        </div>
+
+        <div class="office__body">
+          <p class="office__kicker">办公区 01</p>
+          <h3 class="office__name">北京办公区</h3>
+
+          <ul class="office__list">
+            <li>
+              <svg class="office__icon" aria-hidden="true"><use href="#i-pin"/></svg>
+              <span>北京市 <em class="todo">详细地址待补充</em></span>
+            </li>
+            <li>
+              <svg class="office__icon" aria-hidden="true"><use href="#i-phone"/></svg>
+              <span>010-0000 0000 <em class="todo">电话待补充</em></span>
+            </li>
+          </ul>
+
+          <dl class="office__meta">
+            <div><dt>工作时间</dt><dd>周一至周五 10:00 — 19:00</dd></div>
+            <div><dt>一起学习</dt><dd>请说明想跟的方向与每周可投入时间</dd></div>
+          </dl>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="footer" id="footer" data-tone="dark">
+  <div class="wrap">
+    <div class="footer__top">
+      <p class="footer__cta">订阅啊这AI最新消息，获取<span>研究动态</span></p>
+      <form class="subscribe" id="subscribe" novalidate>
+        <label class="sr-only" for="subscribe-email">电子邮箱地址</label>
+        <input id="subscribe-email" name="email" type="email" placeholder="请输入电子邮箱地址" autocomplete="email" required>
+        <button type="submit">订阅</button>
+      </form>
+    </div>
+    <p class="subscribe__note" id="subscribe-note" role="status"></p>
+
+    <div class="footer__mid">
+      <a class="footer__brand" href="#top" aria-label="啊这AI 首页">
+        <img class="footer__mark" src="assets/img/az-i.png" alt="" width="26" height="26">
+        <span>啊这AI<small>AZAI</small></span>
+      </a>
+
+      <nav class="footer__nav" aria-label="页脚导航">
+        <a href="#about">关于我们</a>
+        <a href="#culture">啊这文化</a>
+        <a href="#agi">AGI 探索</a>
+        <a href="#product">产品 AZ I</a>
+        <a href="#map">学习地图</a>
+        <a href="#news">最新资讯</a>
+        <a href="#careers">加入我们</a>
+        <a href="#contact">联系我们</a>
+      </nav>
+
+      <a class="footer__blog" href="https://ssssssss.eu.org/AZpresented/index.html#/" target="_blank" rel="noopener">
+        <span>AZ presented 博客</span>
+        <svg aria-hidden="true"><use href="#i-arrow"/></svg>
+      </a>
+    </div>
+
+    <div class="footer__bottom">
+      <p>© 2026 啊这AI（AZAI）版权所有</p>
+      <p class="footer__icp"><span>京ICP备XXXXXXXX号 <em class="todo">备案信息待补充</em></span></p>
+    </div>
+  </div>
+</footer>
+
+<script src="assets/js/main.js" defer></script>
 </body>
-
 </html>
