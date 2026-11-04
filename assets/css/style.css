@@ -966,7 +966,22 @@ button { cursor: pointer; }
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: clamp(18px, 2.4vw, 34px);
   margin-top: clamp(28px, 4vh, 44px);
+  min-height: 120px;
 }
+.posts:empty::before {
+  content: "正在载入最新文章…";
+  grid-column: 1 / -1;
+  align-self: center;
+  font-size: 13px;
+  letter-spacing: .08em;
+  color: var(--muted-2);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+.posts.is-error:empty::before {
+  content: "暂时无法载入文章，请稍后重试。";
+  animation: none;
+}
+@keyframes pulse { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
 .post {
   position: relative;
   display: flex;

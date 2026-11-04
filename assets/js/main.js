@@ -6,6 +6,7 @@
 
   var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var BLOG = 'https://ssssssss.eu.org/AZpresented/index.html#/';
+  var POSTS_API = 'https://abyss.realgeneral.eu.org/api/posts?limit=6';
 
   /* ---------- 背景 / 导航状态 ---------- */
   var rail = document.getElementById('rail');
@@ -176,6 +177,126 @@
       setMenu(false);
     }
   });
+
+  /* ---------- 最新资讯：运行时读取博客 ----------
+     页面里的三张卡片是静态兜底，接口成功时用最新文章替换 */
+  var postsEl = document.querySelector('.posts');
+
+  function formatDate(iso) {
+    if (!iso) return '';
+    var d = String(iso).slice(0, 10).split('-');
+    return d.length === 3 ? d[0] + '.' + d[1] + '.' + d[2] : '';
+  }
+
+  // 博客摘要里常带「用户：… 助手：…」的问答痕迹和 LaTeX 行内公式
+  function cleanExcerpt(text) {
+    if (!text) return '';
+    var t = String(text);
+    var qa = t.indexOf('助手：');
+    if (qa >= 0) t = t.slice(qa + 3);
+
+    return t
+      .replace(/\\left|\\right/g, '')
+      .replace(/\^?\\circ/g, '°')
+      .replace(/\\times/g, '×')
+      .replace(/\\cdot/g, '·')
+      .replace(/\\leq?/g, '≤')
+      .replace(/\\geq?/g, '≥')
+      .replace(/\${1,2}/g, '')
+      .replace(/\\[a-zA-Z]+/g, '')
+      .replace(/[{}]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function arrowIcon() {
+    var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    var use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+    use.setAttribute('href', '#i-arrow');
+    svg.appendChild(use);
+    svg.setAttribute('aria-hidden', 'true');
+    return svg;
+  }
+
+  function renderPosts(list) {
+    if (!postsEl) return;
+    postsEl.textContent = '';
+
+    list.slice(0, 3).forEach(function (post) {
+      var a = document.createElement('a');
+      a.className = 'post';
+      a.href = BLOG + 'post/' + encodeURIComponent(post.slug);
+      a.target = '_blank';
+      a.rel = 'noopener';
+
+      var meta = document.createElement('div');
+      meta.className = 'post__meta';
+
+      var cat = document.createElement('span');
+      cat.className = 'post__cat';
+      cat.textContent = post.category || '随笔';
+
+      var time = document.createElement('time');
+      time.dateTime = String(post.created_at || '').slice(0, 10);
+      time.textContent = formatDate(post.created_at);
+
+      meta.appendChild(cat);
+      meta.appendChild(time);
+
+      var title = document.createElement('h3');
+      title.className = 'post__title';
+      title.textContent = post.title || '无标题';
+
+      var excerpt = document.createElement('p');
+      excerpt.className = 'post__excerpt';
+      excerpt.textContent = cleanExcerpt(post.excerpt);
+
+      var foot = document.createElement('div');
+      foot.className = 'post__foot';
+
+      var mins = document.createElement('span');
+      mins.textContent = post.reading_minutes ? post.reading_minutes + ' 分钟阅读' : '阅读全文';
+
+      foot.appendChild(mins);
+      foot.appendChild(arrowIcon());
+
+      a.appendChild(meta);
+      a.appendChild(title);
+      a.appendChild(excerpt);
+      a.appendChild(foot);
+      postsEl.appendChild(a);
+    });
+  }
+
+  function loadPosts() {
+    if (!postsEl || !('fetch' in window)) return;
+
+    var controller = new AbortController();
+    var timer = setTimeout(function () { controller.abort(); }, 8000);
+
+    fetch(POSTS_API, { signal: controller.signal })
+      .then(function (res) {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.json();
+      })
+      .then(function (data) {
+        var list = (data && data.posts ? data.posts : [])
+          .filter(function (p) { return p && !p.deleted; })
+          .sort(function (a, b) {
+            return String(b.created_at).localeCompare(String(a.created_at));
+          });
+
+        if (list.length) renderPosts(list);
+      })
+      .catch(function () {
+        if (postsEl) postsEl.classList.add('is-error');
+      })
+      .finally(function () {
+        clearTimeout(timer);
+      });
+  }
+
+  loadPosts();
 
   /* ---------- 订阅表单 ---------- */
   var form = document.getElementById('subscribe');
