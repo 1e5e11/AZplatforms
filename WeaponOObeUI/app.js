@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const BUILD = '2026-11-03-history-6';
+  const BUILD = '2026-11-08-azii';
   const POLLINATIONS_ENDPOINT = 'https://text.pollinations.ai/openai';
   const KEYLESSAI_ENDPOINT = 'https://keylessai.thryx.workers.dev/v1/chat/completions';
   const PROVIDER_PRESETS = {
@@ -12,7 +12,7 @@
     glm: { name:'智谱 GLM', endpoint:'https://open.bigmodel.cn/api/paas/v4/chat/completions', model:'glm-4.5-flash' },
     kimi: { name:'Moonshot Kimi', endpoint:'https://api.moonshot.cn/v1/chat/completions', model:'kimi-k3' },
     siliconflow: { name:'硅基流动', endpoint:'https://api.siliconflow.cn/v1/chat/completions', model:'deepseek-ai/DeepSeek-V4-Flash' },
-    azai: { name:'AZAI（啊这AI）', endpoint:'https://ai.realgeneral.eu.org/v1/chat/completions', model:'AZ I' },
+    azai: { name:'AZAI（啊这AI）', endpoint:'https://ai.realgeneral.eu.org/v1/chat/completions', model:'AZ II', models:['AZ II', 'AZ I'] },
     custom: { name:'Custom API', endpoint:'', model:'custom-model' }
   };
   const LOCAL_PROXY_DEFAULT = 'http://127.0.0.1:8787/api/proxy';
@@ -104,7 +104,7 @@
       basicSettings: '常用设置', connectionSettings: '连接与密钥', generationSettings: '生成设置', instructionsSettings: '提示词',
       resizeSidebar: '调整侧栏宽度', closeHistory: '关闭历史', showSidebar: '展开侧栏', hideSidebar: '收起侧栏', quickAdvanced: '会话与参数', exportChat: '导出 JSON', exportMarkdown: '导出 Markdown', exportAll: '导出全部',
       systemPromptNote: '此提示词会在每次对话中优先发送；保存后生效。', promptCount: '{count} / 10000', clearSystemPrompt: '清空提示词',
-      keyOptional: 'AZAI 默认无需 API Key；仅在服务端启用认证时填写。', azaiSettingNote: '模型 AZ I 仅支持文本，温度 0–5，服务端固定关闭思考。该服务目前不返回 CORS 头，浏览器直连会被拦截；服务端为响应添加 Access-Control-Allow-Origin 即可。',
+      keyOptional: 'AZAI 默认无需 API Key；仅在服务端启用认证时填写。', azaiSettingNote: '模型 AZ II（默认，2000 token 上下文）与 AZ I（4000 token 上下文）仅支持文本，温度 0–5，服务端固定关闭思考。该服务目前不返回 CORS 头，浏览器直连会被拦截；服务端为响应添加 Access-Control-Allow-Origin 即可。',
       azaiCorsHint: 'AZAI 服务未返回 CORS 头，浏览器无法直连；服务端只需为响应添加 Access-Control-Allow-Origin: *（请求已用简单请求，无需 OPTIONS）。',
       apiKeyOptionalPlaceholder: '可选；默认无需填写', azaiDocsLink: 'AZAI API 文档',
       pollinationsKeyNote: 'Pollinations 免费接口无需 API Key，打开页面即可对话；匿名额度有频率限制。',
@@ -173,7 +173,7 @@
       basicSettings: 'Basic', connectionSettings: 'Connection & key', generationSettings: 'Generation', instructionsSettings: 'Instructions',
       resizeSidebar: 'Resize sidebar', closeHistory: 'Close history', showSidebar: 'Show sidebar', hideSidebar: 'Hide sidebar', quickAdvanced: 'Chat & parameters', exportChat: 'Export JSON', exportMarkdown: 'Export Markdown', exportAll: 'Export all',
       systemPromptNote: 'This instruction is sent before each conversation and takes effect when saved.', promptCount: '{count} / 10000', clearSystemPrompt: 'Clear prompt',
-      keyOptional: 'AZAI does not require a key by default. Enter one only if server authentication is enabled.', azaiSettingNote: 'AZ I accepts text only, supports temperature 0–5, and keeps reasoning disabled. The service currently sends no CORS headers, so browser-direct calls are blocked; adding Access-Control-Allow-Origin to its responses is enough.',
+      keyOptional: 'AZAI does not require a key by default. Enter one only if server authentication is enabled.', azaiSettingNote: 'AZ II (default, 2000-token context) and AZ I (4000-token context) accept text only, support temperature 0–5, and keep reasoning disabled. The service currently sends no CORS headers, so browser-direct calls are blocked; adding Access-Control-Allow-Origin to its responses is enough.',
       azaiCorsHint: 'AZAI sends no CORS headers, so the browser cannot call it directly. Add Access-Control-Allow-Origin: * to its responses; requests already use a simple request, so no OPTIONS handler is needed.',
       apiKeyOptionalPlaceholder: 'Optional; no key by default', azaiDocsLink: 'AZAI API docs',
       pollinationsKeyNote: 'Pollinations is free and needs no API key — the page works as soon as it opens. Anonymous requests are rate limited.',
@@ -601,9 +601,12 @@
   }
   function cachedModels(cfg) {
     const cached = settings.providerModels[modelCacheKey(cfg)];
-    if (Array.isArray(cached) && cached.length) return cached;
     const preset = PROVIDER_PRESETS[cfg.provider];
-    return preset?.model ? [{ id: preset.model, name: preset.model }] : [];
+    const presetIds = preset?.models?.length ? preset.models : (preset?.model ? [preset.model] : []);
+    const known = new Set((cached || []).map(m => m.id));
+    const extra = presetIds.filter(id => !known.has(id)).map(id => ({ id, name: id }));
+    if (Array.isArray(cached) && cached.length) return [...cached, ...extra];
+    return extra;
   }
   function buildModelOptions(select, selected, modelList = cachedModels(settings)) {
     const models = modelList;
@@ -1214,7 +1217,7 @@
   }
 
   function requestHeaders(key = currentApiKey(), provider = settings.provider) {
-    // AZ I parses JSON from a text/plain body. Keeping it a CORS "simple
+    // AZAI parses JSON from a text/plain body. Keeping it a CORS "simple
     // request" avoids the preflight OPTIONS it does not implement.
     const headers = { 'Content-Type': provider === 'azai' ? 'text/plain' : 'application/json' };
     if (key) headers.Authorization = `Bearer ${key}`;
@@ -1346,7 +1349,7 @@
     for (const a of images) parts.push({ type:'image_url', image_url:{ url:a.dataUrl } });
     return parts;
   }
-  // AZ I caps messages at 100, each at 16000 chars, and the whole request at
+  // AZAI caps messages at 100, each at 16000 chars, and the whole request at
   // 64000 chars (256 KiB body). Trim old turns rather than let the server 413.
   function limitAzaiMessages(messages) {
     const list = messages.slice(-100).map(m => (
@@ -1746,7 +1749,7 @@
         temperature:0,
         stream:false
       };
-      // AZ I ignores generation caps; omit it so the request matches its docs.
+      // AZAI ignores generation caps; omit it so the request matches its docs.
       if (candidate.provider !== 'azai') payload.max_tokens = 16;
       const response = await networkFetch(endpoint, {
         method:'POST',

@@ -7,14 +7,14 @@
   <title>WEAPON OOBE UI</title>
 
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css" crossorigin="anonymous" />
-  <link rel="stylesheet" href="./md-renderer.css?v=2026-11-03-15" />
-  <link rel="stylesheet" href="./app.css?v=2026-11-03-15" />
+  <link rel="stylesheet" href="./md-renderer.css?v=2026-11-08-azii" />
+  <link rel="stylesheet" href="./app.css?v=2026-11-08-azii" />
   <script defer src="https://cdn.jsdelivr.net/npm/marked@15.0.7/lib/marked.umd.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/dompurify@3.2.6/dist/purify.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.11.1/build/highlight.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js" crossorigin="anonymous"></script>
-  <script defer src="./md-renderer.js?v=2026-11-03-15"></script>
-  <script defer src="./app.js?v=2026-11-03-15"></script>
+  <script defer src="./md-renderer.js?v=2026-11-08-azii"></script>
+  <script defer src="./app.js?v=2026-11-08-azii"></script>
 
 </head>
 <body>
@@ -179,7 +179,7 @@
             <option value="glm">智谱 GLM</option>
             <option value="kimi">Moonshot Kimi</option>
             <option value="siliconflow">硅基流动</option>
-            <option value="azai">AZAI（啊这一号）</option>
+            <option value="azai">AZAI（AZ I / AZ II）</option>
             <option value="custom">Custom OpenAI-compatible</option>
           </select>
         </div>
@@ -201,6 +201,7 @@
             <option value="glm-4.5-flash"></option>
             <option value="kimi-k3"></option>
             <option value="deepseek-ai/DeepSeek-V4-Flash"></option>
+            <option value="AZ II"></option>
             <option value="AZ I"></option>
           </datalist>
         </div>
@@ -245,7 +246,7 @@
           </select>
         </div>
         <div class="setting-note" id="keySettingNote">A remembered key is stored locally in IndexedDB. Any script running on the same origin can potentially access it.</div>
-        <div id="azaiSettingNote" class="setting-note full-width" hidden><span id="azaiSettingNoteText">AZAI defaults to no API key, accepts text only, and supports temperature from 0 to 5.</span> <a id="azaiDocsLink" href="https://ssssssss.eu.org/ai/docs/AZ%20I/api.md" target="_blank" rel="noopener noreferrer">API documentation</a></div>
+        <div id="azaiSettingNote" class="setting-note full-width" hidden><span id="azaiSettingNoteText">AZ II (default, 2000-token context) and AZ I (4000-token context) accept text only, support temperature 0–5, and keep reasoning disabled.</span> <a id="azaiDocsLink" href="https://ssssssss.eu.org/AZpresented/index.html#/post/az-i-az-ii-api" target="_blank" rel="noopener noreferrer">API documentation</a></div>
       </details>
       <details class="settings-group">
         <summary id="generationSettingsSummary">Generation</summary>
