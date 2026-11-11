@@ -458,7 +458,7 @@ $$
     try { exportHost = buildExportHost(); } catch (error) { status(error.message); return; }
     const syntaxCSS = document.getElementById('codeTheme').textContent;
     const mathCSS = exportKaTeXStyles();
-    copy(`<style>del{color:#7c0a21;text-decoration-thickness:2px}.document-page+.document-page{break-before:page}img{max-width:100%}pre{overflow:auto;white-space:pre}code{font-family:Consolas,monospace}.math-display{overflow-x:auto;text-align:center}${syntaxCSS}${mathCSS}</style>\n${exportHost.outerHTML}`, '全文 HTML 已复制');
+    copy(`<style>del{color:#7c0a21;text-decoration-thickness:2px}.document-page+.document-page{break-before:page}img,svg{max-width:100%;height:auto}pre{overflow:auto;white-space:pre}code{font-family:Consolas,monospace}.math-display{overflow-x:auto;text-align:center}${syntaxCSS}${mathCSS}</style>\n${exportHost.outerHTML}`, '全文 HTML 已复制');
   };
   $('exportFormat').addEventListener('change', () => { $('pdfMode').hidden = $('exportFormat').value !== 'pdf'; });
   $('exportFile').onclick = async () => {

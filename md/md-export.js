@@ -20,13 +20,13 @@
     .moye-export table{border-collapse:collapse;display:table;max-width:100%;font-size:14px;table-layout:fixed;width:100%}
     .moye-export th,.moye-export td{padding:8px 14px;border:1px solid #7c0a2164;text-align:left;overflow-wrap:anywhere}
     .moye-export th{color:#7c0a21;font-weight:400}.moye-export del{color:#7c0a21;text-decoration-thickness:2px}
-    .moye-export hr{border:0;border-top:1px solid #7c0a2164;margin:28px 0}.moye-export img{max-width:100%;height:auto}
+    .moye-export hr{border:0;border-top:1px solid #7c0a2164;margin:28px 0}.moye-export img,.moye-export svg{max-width:100%;height:auto}
     .moye-export .math-display{max-width:100%;margin:22px 0;padding:4px 0;overflow:hidden;text-align:center}
     .moye-export .math-display>.katex-display{margin:0}.moye-export .math-inline{white-space:nowrap}
     .moye-export .toc-link{display:block;font-size:14px;line-height:30px;padding-left:calc(10px + var(--depth,0)*14px);text-decoration:none}
     .moye-export .toc-page{float:right;font-size:10px;margin-left:8px}
     .moye-export .document-page{display:flow-root}.moye-export .document-page+.document-page{margin-top:48px;padding-top:32px;border-top:1px solid #7c0a2164}
-    @media print{.moye-export{width:auto;padding:0}.moye-export .document-page+.document-page{break-before:page;margin:0;padding:0;border:0}}
+    @media print{.moye-export{width:auto;padding:0}.moye-export svg{break-inside:avoid}.moye-export .document-page+.document-page{break-before:page;margin:0;padding:0;border:0}}
   `;
   function dataURL(blob) {
     return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(blob); });
@@ -98,7 +98,7 @@
     let end = limit;
     // Move page boundaries above any text line, table row, image or formula they intersect.
     const rects = [];
-    for (const element of page.querySelectorAll('img, tr, .math-display, h1, h2, h3, h4, h5, h6')) rects.push(element.getBoundingClientRect());
+    for (const element of page.querySelectorAll('img, svg, tr, .math-display, h1, h2, h3, h4, h5, h6')) rects.push(element.getBoundingClientRect());
     const walker = document.createTreeWalker(page, NodeFilter.SHOW_TEXT);
     while (walker.nextNode()) {
       if (!walker.currentNode.textContent.trim()) continue;

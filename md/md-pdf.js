@@ -84,6 +84,7 @@
     await document.fonts.ready;
     return fonts;
   }
+  const SVG_GEOMETRY = ['x', 'y', 'width', 'height', 'cx', 'cy', 'r', 'rx', 'ry', 'd', 'dx', 'dy', 'x1', 'y1', 'x2', 'y2'];
   function svgImage(image) {
     if (!image.src?.startsWith('data:image/svg+xml')) return null;
     const comma = image.src.indexOf(','), header = image.src.slice(0, comma), body = image.src.slice(comma + 1);
@@ -91,6 +92,11 @@
     const doc = new DOMParser().parseFromString(xml, 'image/svg+xml');
     if (doc.querySelector('parsererror') || doc.documentElement.localName !== 'svg') throw new Error('SVG 图片格式无效。');
     DOMPurify.sanitize(doc.documentElement, { IN_PLACE:true, USE_PROFILES:{ svg:true, svgFilters:true } });
+    // html2canvas 会把计算样式写成 style。像 rect 的 rx: auto 会被 svg2pdf
+    // 当成长度并得到 NaN，图形属性本身仍在元素上，去掉这些取值即可。
+    for (const element of doc.querySelectorAll('[style]')) {
+      for (const name of SVG_GEOMETRY) if (element.style.getPropertyValue(name).trim() === 'auto') element.style.removeProperty(name);
+    }
     return doc.documentElement;
   }
   function svgLabels(svg, fonts) {

@@ -4,6 +4,12 @@
 
   const CODE_ALIASES = { 'c++':'cpp', cxx:'cpp', cc:'cpp', py:'python', js:'javascript', html:'xml', htm:'xml', md:'markdown', ts:'typescript', sh:'bash', text:'plaintext', txt:'plaintext' };
   const DATA_IMAGE = /^data:image\/(?:png|jpeg|gif|webp|avif|bmp|x-icon|svg\+xml);base64,[a-z0-9+/]+={0,2}$/i;
+  const SVG_BLOCK = /^ {0,3}<svg[\s>][\s\S]*?<\/svg\s*>(?:\n|$)/i;
+  const SVG_INLINE = /^<svg[\s>][\s\S]*?<\/svg\s*>/i;
+  // 定位属性会让内嵌图形脱离正文，盖住阅读器界面。
+  const SVG_BLOCKED_STYLES = ['position', 'inset', 'inset-block', 'inset-block-start', 'inset-block-end', 'inset-inline', 'inset-inline-start', 'inset-inline-end', 'top', 'right', 'bottom', 'left', 'z-index', 'float'];
+  const MAX_INLINE_MATH = 5000, MAX_DISPLAY_MATH = 20000;
+  let svgSequence = 0;
 
   function escapeHTML(text) {
     return text.replace(/[&<>"']/g, character => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[character]);
@@ -240,9 +246,14 @@
   function processBareBlock(lines) {
     const output = lines.slice();
     const protectedLines = new Array(lines.length).fill(false);
-    let dollar = false, bracket = false;
+    let dollar = false, bracket = false, svg = false;
     for (let index = 0; index < lines.length; index++) {
       const trimmed = lines[index].trim();
+      if (svg || /^<svg[\s>]/i.test(trimmed)) {
+        protectedLines[index] = true;
+        svg = !/<\/svg\s*>/i.test(trimmed);
+        continue;
+      }
       if (trimmed === '$$') { dollar = !dollar; protectedLines[index] = true; continue; }
       if (trimmed === '\\[' || trimmed === '\\]') { bracket = !bracket; protectedLines[index] = true; continue; }
       if (dollar || bracket) { protectedLines[index] = true; continue; }
@@ -305,12 +316,12 @@
     global.__moyeMathExtensionInstalled = true;
     marked.use({ extensions: [
       {
-        name:'displayMathDollar', level:'block', start:source => source.indexOf('$$'),
+        name:'displayMathDollar', level:'block', start:source => { const index = source.search(/^\$\$/m); return index < 0 ? undefined : index; },
         tokenizer(source) { const match = /^\$\$[ \t]*([\s\S]*?)[ \t]*\$\$(?:\n|$)/.exec(source); if (match && match[1].trim()) return mathToken('displayMathDollar', match[0], match[1], true); },
         renderer:token => `<div data-md-math="display">${escapeHTML(token.text)}</div>`
       },
       {
-        name:'displayMathBracket', level:'block', start:source => source.indexOf('\\['),
+        name:'displayMathBracket', level:'block', start:source => { const index = source.search(/^\\\[/m); return index < 0 ? undefined : index; },
         tokenizer(source) { const match = /^\\\[[ \t]*([\s\S]*?)[ \t]*\\\](?:\n|$)/.exec(source); if (match && match[1].trim()) return mathToken('displayMathBracket', match[0], match[1], true); },
         renderer:token => `<div data-md-math="display">${escapeHTML(token.text)}</div>`
       },
@@ -323,6 +334,30 @@
         name:'inlineMathParen', level:'inline', start:source => source.indexOf('\\('),
         tokenizer(source) { const match = /^\\\((.+?)\\\)/.exec(source); if (match && !match[1].includes('\n')) return mathToken('inlineMathParen', match[0], match[1], false); },
         renderer:token => `<span data-md-math="inline">${escapeHTML(token.text)}</span>`
+      }
+    ] });
+  }
+
+  // 内嵌 <svg> 整块交给原始 HTML，避免图形里的文字被当成 Markdown 语法。
+  function installSVGExtension() {
+    if (global.__moyeSVGExtensionInstalled) return;
+    global.__moyeSVGExtensionInstalled = true;
+    marked.use({ extensions: [
+      {
+        name:'inlineSvgBlock', level:'block',
+        start:source => { const index = source.search(/^ {0,3}<svg[\s>]/i); return index < 0 ? undefined : index; },
+        tokenizer(source) {
+          const match = SVG_BLOCK.exec(source);
+          if (match) return { type:'html', raw:match[0], text:match[0].trim(), block:true };
+        }
+      },
+      {
+        name:'inlineSvg', level:'inline',
+        start:source => { const index = source.search(/<svg[\s>]/i); return index < 0 ? undefined : index; },
+        tokenizer(source) {
+          const match = SVG_INLINE.exec(source);
+          if (match) return { type:'html', raw:match[0], text:match[0], block:false };
+        }
       }
     ] });
   }
@@ -354,11 +389,140 @@
     tokens.splice(0, tokens.length, ...convert(tokens));
   }
 
+  function splitCSSList(text) {
+    const parts = [];
+    let current = '', quote = '', depth = 0;
+    for (let index = 0; index < text.length; index++) {
+      const character = text[index];
+      if (quote) {
+        current += character;
+        if (character === '\\') current += text[++index] || '';
+        else if (character === quote) quote = '';
+        continue;
+      }
+      if (character === '"' || character === "'") { quote = character; current += character; continue; }
+      if (character === '(' || character === '[') depth++;
+      else if (character === ')' || character === ']') depth = Math.max(0, depth - 1);
+      if (character === ',' && depth === 0) { parts.push(current); current = ''; continue; }
+      current += character;
+    }
+    if (current.trim()) parts.push(current);
+    return parts;
+  }
+
+  // 只读取顶层样式规则；@media、@import 等条件规则不进入内联流程。
+  function cssRules(css) {
+    const rules = [];
+    let index = 0;
+    while (index < css.length) {
+      while (index < css.length && /\s/.test(css[index])) index++;
+      if (css.startsWith('/*', index)) {
+        const close = css.indexOf('*/', index + 2);
+        index = close < 0 ? css.length : close + 2;
+        continue;
+      }
+      const start = index;
+      let quote = '', depth = 0, open = -1;
+      while (index < css.length) {
+        const character = css[index];
+        if (quote) {
+          if (character === '\\') index++;
+          else if (character === quote) quote = '';
+        } else if (character === '"' || character === "'") quote = character;
+        else if (css.startsWith('/*', index)) {
+          const close = css.indexOf('*/', index + 2);
+          index = close < 0 ? css.length : close + 1;
+        } else if (character === '(') depth++;
+        else if (character === ')') depth = Math.max(0, depth - 1);
+        else if (character === '{' && depth === 0) { open = index; break; }
+        else if (character === ';' && depth === 0) break;
+        index++;
+      }
+      const prelude = css.slice(start, index).trim();
+      if (open < 0 || index >= css.length || css[index] === ';') { index++; continue; }
+      quote = '';
+      depth = 1;
+      index++;
+      while (index < css.length && depth) {
+        const character = css[index];
+        if (quote) {
+          if (character === '\\') index++;
+          else if (character === quote) quote = '';
+        } else if (character === '"' || character === "'") quote = character;
+        else if (css.startsWith('/*', index)) {
+          const close = css.indexOf('*/', index + 2);
+          index = close < 0 ? css.length : close + 1;
+        } else if (character === '{') depth++;
+        else if (character === '}') depth--;
+        index++;
+      }
+      if (!prelude.startsWith('@')) rules.push({ selector:prelude, body:css.slice(open + 1, Math.max(open + 1, index - 1)) });
+    }
+    return rules;
+  }
+
+  // SVG 内的 <style> 一旦留在页面里会作用于整篇文档。这里把规则展开到
+  // 匹配的元素上，再移除 <style>，样式便只跟随这张图。
+  function inlineSVGStyles(svg) {
+    for (const style of [...svg.querySelectorAll('style')]) {
+      for (const rule of cssRules(style.textContent || '')) {
+        for (const selector of splitCSSList(rule.selector)) {
+          const rootOnly = /^(?::root|svg)$/i.test(selector.trim());
+          let target = selector.trim().replace(/^:root\b/i, '').replace(/^svg\b/i, '').replace(/^[\s>+~]+/, '').trim() || '*';
+          let nodes;
+          try { nodes = rootOnly ? [svg] : [...svg.querySelectorAll(target)]; } catch { continue; }
+          for (const node of nodes) {
+            if (!node.style) continue;
+            node.style.cssText = `${node.style.cssText}${node.style.cssText ? ';' : ''}${rule.body}`;
+          }
+        }
+      }
+      style.remove();
+    }
+  }
+
+  // 图形内部 id 加前缀，避免多张图或页面元素互相覆盖引用。
+  function scopeSVG(svg) {
+    inlineSVGStyles(svg);
+    const scope = `md-svg-${++svgSequence}`;
+    const elements = [svg, ...svg.querySelectorAll('*')];
+    const idNodes = elements.filter(node => node.hasAttribute('id'));
+    const ids = new Set(idNodes.map(node => node.getAttribute('id')).filter(Boolean));
+    const rename = id => ids.has(id) ? `${scope}-${id}` : id;
+    for (const element of elements) {
+      for (const name of SVG_BLOCKED_STYLES) element.style?.removeProperty(name);
+      for (const name of element.getAttributeNames()) {
+        if (name === 'id') continue;
+        const value = element.getAttribute(name);
+        if (!value) continue;
+        let next = value;
+        if (name === 'aria-labelledby' || name === 'aria-describedby') next = value.split(/\s+/).map(rename).join(' ');
+        else if (value.includes('#')) {
+          next = value.replace(/url\(\s*(['"]?)#([^)'"\s]+)\1\s*\)/g, (match, quote, id) => `url(${quote}#${rename(id)}${quote})`);
+          if ((name === 'href' || name === 'xlink:href') && next.startsWith('#')) next = `#${rename(next.slice(1))}`;
+        }
+        if (next !== value) element.setAttribute(name, next);
+      }
+    }
+    for (const node of idNodes) node.setAttribute('id', `${scope}-${node.getAttribute('id')}`);
+  }
+
+  function prepareContent(root) {
+    for (const style of [...root.querySelectorAll('style')]) if (!style.closest('svg')) style.remove();
+    for (const element of root.querySelectorAll('[style]')) if (!element.closest('svg')) element.removeAttribute('style');
+    for (const element of root.querySelectorAll('[id]')) if (!element.closest('svg')) element.removeAttribute('id');
+    for (const input of [...root.querySelectorAll('input')]) {
+      if (input.getAttribute('type') !== 'checkbox' || !input.hasAttribute('disabled')) { input.remove(); continue; }
+      for (const attribute of [...input.attributes]) if (!['type', 'checked', 'disabled'].includes(attribute.name)) input.removeAttribute(attribute.name);
+    }
+    for (const svg of root.querySelectorAll('svg')) if (!svg.parentElement?.closest('svg')) scopeSVG(svg);
+  }
+
   function sanitize(html) {
     return DOMPurify.sanitize(html, {
-      USE_PROFILES:{ html:true },
-      FORBID_TAGS:['style','form','button','iframe','object','embed','video','audio'],
-      FORBID_ATTR:['style','id','name','srcset','autofocus','tabindex','hidden'],
+      USE_PROFILES:{ html:true, svg:true, svgFilters:true },
+      FORBID_TAGS:['form','button','select','option','optgroup','datalist','textarea','label','fieldset','legend','output','meter','progress','dialog','iframe','object','embed','video','audio'],
+      FORBID_ATTR:['name','srcset','autofocus','tabindex','hidden'],
       ALLOW_DATA_ATTR:false,
       ADD_ATTR:['data-md-math']
     });
@@ -367,9 +531,19 @@
   function renderMath(root) {
     for (const placeholder of root.querySelectorAll('[data-md-math]')) {
       const displayMode = placeholder.dataset.mdMath === 'display';
+      const source = placeholder.textContent;
       const wrapper = document.createElement(displayMode ? 'div' : 'span');
       wrapper.className = displayMode ? 'math-display' : 'math-inline';
-      katex.render(placeholder.textContent, wrapper, { displayMode, throwOnError:false, strict:'ignore', trust:false, output:'htmlAndMathml', errorColor:'#7c0a21' });
+      try {
+        if (source.length > (displayMode ? MAX_DISPLAY_MATH : MAX_INLINE_MATH)) throw new Error('公式过长');
+        // maxSize 限制 \rule、\kern 等用户指定尺寸，避免单个公式撑出整页。
+        katex.render(source, wrapper, { displayMode, throwOnError:false, strict:'ignore', trust:false, maxSize:20, output:'htmlAndMathml', errorColor:'#7c0a21' });
+      } catch {
+        // 深层嵌套等极端输入可能抛出非 ParseError；保留原文，不中断整篇文档。
+        wrapper.classList.add('math-error');
+        wrapper.style.cssText = 'color:#7c0a21;white-space:pre-wrap;overflow-wrap:anywhere';
+        wrapper.textContent = source.length > 600 ? `${source.slice(0, 600)}…` : source;
+      }
       placeholder.replaceWith(wrapper);
     }
   }
@@ -382,6 +556,7 @@
       this.pages = [];
       this.headings = [];
       installMathExtension();
+      installSVGExtension();
     }
 
     parse(markdown, options = {}) {
@@ -408,6 +583,7 @@
           batch.links = tokens.links;
           const template = document.createElement('template');
           template.innerHTML = sanitize(marked.parser(batch));
+          prepareContent(template.content);
           for (const element of template.content.querySelectorAll('[class]')) {
             const language = element.tagName === 'CODE' && element.parentElement?.tagName === 'PRE' && /^language-([\w+-]+)$/.exec(element.className);
             element.removeAttribute('class');
@@ -453,9 +629,9 @@
             else if (!['https:','http:', ...(attr === 'href' ? ['mailto:','tel:'] : [])].includes(url.protocol)) node.removeAttribute(attr);
             else node.setAttribute(attr, url.href);
           } catch { node.removeAttribute(attr); }
-          if (node.tagName === 'A') {
-            node.rel = 'noopener noreferrer';
-            if (/^https?:/.test(node.getAttribute('href') || '')) node.target = '_blank';
+          if (node.localName === 'a') {
+            node.setAttribute('rel', 'noopener noreferrer');
+            if (/^https?:/.test(node.getAttribute('href') || '')) node.setAttribute('target', '_blank');
           }
           if (node.tagName === 'IMG') { node.loading = 'lazy'; node.referrerPolicy = 'no-referrer'; }
         }
