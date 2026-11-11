@@ -538,6 +538,7 @@ select.az-input {
   flex: 0 0 auto;
   padding: 12px max(20px, calc((100vw - 800px) / 2)) 10px;
   border-bottom: 1px solid var(--az-accent-alpha);
+  background: var(--az-page);
 }
 
 .article-title-row {

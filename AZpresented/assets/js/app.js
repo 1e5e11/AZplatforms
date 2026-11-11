@@ -736,7 +736,8 @@
   async function renderArticle(slug, my) {
     showLoading(L('正在读取文章…', 'Loading post…'));
     try {
-      var data = await request('/posts/' + encodeURIComponent(slug));
+      var metaOnly = /^https:\/\//i.test(API);
+      var data = await request('/posts/' + encodeURIComponent(slug) + (metaOnly ? '?meta=1' : ''));
       if (my !== ticket) return;
       var post = data.post;
       var readerUrl = rendererUrlForPost(post);
