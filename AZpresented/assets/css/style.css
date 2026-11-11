@@ -532,6 +532,7 @@ select.az-input {
   flex-direction: column;
   padding: 0;
   overflow: hidden;
+  background-color: var(--az-page);
 }
 
 .article-head {
