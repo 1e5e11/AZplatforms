@@ -148,7 +148,8 @@
     '需要管理员权限': 'Admin permission required',
     '无权操作这篇文章': 'You cannot edit this post',
     '分类不存在': 'Category does not exist',
-    '作者不存在': 'Author not found'
+    '作者不存在': 'Author not found',
+    '没有待审核的内容': 'Nothing to review'
   };
 
   function translateServerError(message) {
@@ -255,6 +256,8 @@
     versions: [],
     currentVersion: 0,
     adminPosts: [],
+    reviewItems: [],
+    reviewPreview: '',
     selectedSlugs: {},
     logsFiles: [],
     logFile: '',
@@ -263,7 +266,10 @@
     previewMode: false,
     saving: false,
     aiBusy: false,
-    editingDeleted: false
+    editingDeleted: false,
+    draftStatus: 'published',
+    draftNote: '',
+    draftPendingEdit: null
   };
   state.draft = emptyDraft();
 
@@ -511,7 +517,10 @@
     if (!force && Date.now() - lastStatusAt < 4500) return;
     if (PAGE === 'admin') {
       statusbar.textContent = state.isAdmin
-        ? L('管理员模式 · 令牌仅保存在当前标签页', 'Admin mode · token kept in this tab only')
+        ? L('管理员模式 · 令牌仅保存在当前标签页', 'Admin mode · token kept in this tab only') +
+          (state.reviewItems.length
+            ? ' · ' + L(state.reviewItems.length + ' 项待审核', state.reviewItems.length + ' pending review')
+            : '')
         : state.role === 'author'
           ? L(
             '作者模式 · ' + state.authorName + ' · 只能管理自己的文章',
@@ -611,6 +620,9 @@
     state.currentVersion = 0;
     state.previewMode = false;
     state.editingDeleted = false;
+    state.draftStatus = 'published';
+    state.draftNote = '';
+    state.draftPendingEdit = null;
   }
 
   function draftDirty() {
@@ -801,16 +813,28 @@
     state.previewMode = false;
     try {
       await loadTaxonomy(false);
+      if (state.isAdmin) {
+        var reviews = await request('/admin/reviews', { auth: true });
+        if (my !== ticket) return;
+        state.reviewItems = reviews.reviews || [];
+      } else {
+        state.reviewItems = [];
+      }
       if (route.edit) {
         var data = await request('/admin/posts/' + encodeURIComponent(route.edit), { auth: true });
         if (my !== ticket) return;
         state.editingSlug = data.post.slug;
         state.draft = postToDraft(data.post);
         state.editingDeleted = Boolean(data.post.deleted);
+        state.draftStatus = data.post.status || 'published';
+        state.draftNote = data.post.review_note || '';
+        state.draftPendingEdit = data.pending_edit || null;
         state.versions = data.versions || [];
         state.currentVersion = state.versions.length ? state.versions[0].version : 0;
       } else if (state.adminTab === 'logs' && state.isAdmin) {
         await loadLogs();
+      } else if (state.adminTab === 'review' && state.isAdmin) {
+        // review items were loaded above
       } else {
         applyTaxonomyDefaults();
         if (state.adminTab === 'manage') {
@@ -885,6 +909,7 @@
   function adminHtml() {
     var write = state.adminTab === 'write';
     var manage = state.adminTab === 'manage';
+    var review = state.isAdmin && state.adminTab === 'review';
     var logs = state.isAdmin && state.adminTab === 'logs';
     return (
       '<div class="workspace admin-workspace">' +
@@ -895,6 +920,12 @@
       L('写作', 'Write') + '</button>' +
       '<button class="tab' + (manage ? ' active' : '') + '" data-action="admin-manage">' +
       L('文章管理', 'Posts') + '</button>' +
+      (state.isAdmin
+        ? '<button class="tab' + (review ? ' active' : '') + '" data-action="admin-review">' +
+          L('审核', 'Review') +
+          (state.reviewItems.length ? '<span class="tab-count">' + state.reviewItems.length + '</span>' : '') +
+          '</button>'
+        : '') +
       (state.isAdmin
         ? '<button class="tab' + (logs ? ' active' : '') + '" data-action="admin-logs">' +
           L('日志', 'Logs') + '</button>'
@@ -913,9 +944,9 @@
       '<a class="op" href="' + hrefFor('index.html') + '">' + L('博客', 'Blog') + '</a>' +
       '<button class="op" data-action="logout">' + L('退出', 'Sign out') + '</button>' +
       '</div></div>' +
-      (logs ? logsHtml() : manage ? manageHtml() : editorHtml()) +
+      (logs ? logsHtml() : review ? reviewHtml() : manage ? manageHtml() : editorHtml()) +
       '<div class="admin-bottom">' +
-      (logs
+      (logs || review
         ? ''
         : manage
           ? (state.isAdmin ? statsPanel() : '') + taxonomyPanel()
@@ -923,6 +954,46 @@
       '</div>' +
       '</section></div>'
     );
+  }
+
+  function reviewBanner() {
+    if (!state.editingSlug) return '';
+    var bits = [];
+    if (state.draftStatus === 'pending') {
+      bits.push(
+        '<div class="banner">' + (state.isAdmin
+          ? L('这篇文章还在等待审核。', 'This post is still waiting for review.')
+          : L('文章正在等待管理员审核，通过后才会公开。', 'This post is waiting for admin review. It goes public once approved.')) +
+        '</div>'
+      );
+    } else if (state.draftStatus === 'rejected') {
+      bits.push(
+        '<div class="banner">' + L('文章被驳回', 'This post was rejected') +
+        (state.draftNote ? L('：', ': ') + esc(state.draftNote) : '') +
+        (state.isAdmin ? L('。', '.') : L('。修改后可再次提交审核。', '. Edit it and submit again.')) +
+        '</div>'
+      );
+    }
+    var pending = state.draftPendingEdit;
+    if (pending && pending.status === 'pending') {
+      bits.push(
+        '<div class="banner">' + (state.isAdmin
+          ? L('这篇文章有一份待审核的修改，直接保存会放弃这份修改。', 'This post has an edit waiting for review; saving here discards it.')
+          : L('你的修改正在等待管理员审核，公开页面仍显示旧版本。', 'Your edit is waiting for admin review; the public page still shows the old version.')) +
+        (state.isAdmin
+          ? '<button class="op" data-action="admin-review">' + L('去审核', 'Review it') + '</button>'
+          : '') +
+        '</div>'
+      );
+    } else if (pending && pending.status === 'rejected') {
+      bits.push(
+        '<div class="banner">' + L('上次修改未通过', 'Your last edit was rejected') +
+        (pending.note ? L('：', ': ') + esc(pending.note) : '') +
+        (state.isAdmin ? L('。', '.') : L('。修改后可重新提交。', '. You can edit and submit again.')) +
+        '</div>'
+      );
+    }
+    return bits.join('');
   }
 
   function editorHtml() {
@@ -957,6 +1028,7 @@
           '<button class="op" data-action="restore-post" data-slug="' + esc(state.editingSlug) + '">' +
           L('恢复到文章列表', 'Restore to posts') + '</button></div>'
         : '') +
+      reviewBanner() +
       '<input class="az-input editor-title" data-field="title" value="' + esc(d.title) +
       '" placeholder="' + (state.isAdmin
         ? L('文章标题（留空由 AI 生成）', 'Post title (blank = AI generates)')
@@ -1021,6 +1093,21 @@
     );
   }
 
+  function publishButtonText() {
+    if (state.aiBusy) return L('AI 生成中…', 'Generating…');
+    if (state.saving) return L('保存中…', 'Saving…');
+    if (state.editingDeleted) return L('文章在回收站', 'In trash');
+    if (state.role === 'author') {
+      if (!state.editingSlug) return L('提交审核', 'Submit for review');
+      if (state.draftStatus === 'published') return L('提交修改审核', 'Submit edit for review');
+      return L('保存并重新提交', 'Save & resubmit');
+    }
+    if (state.editingSlug && state.draftStatus !== 'published') {
+      return L('保存并公开', 'Save & publish');
+    }
+    return state.editingSlug ? L('保存修改', 'Save changes') : L('发布文章', 'Publish post');
+  }
+
   function publishPanel() {
     var d = state.draft;
     var editing = !!state.editingSlug;
@@ -1045,29 +1132,29 @@
       '<div class="publish-actions">' +
       '<button class="az-confirm publish-button" data-action="publish"' +
       (state.saving || state.aiBusy || state.editingDeleted ? ' disabled' : '') + '>' +
-      (state.aiBusy
-        ? L('AI 生成中…', 'Generating…')
-        : state.saving
-        ? L('保存中…', 'Saving…')
-        : state.editingDeleted
-          ? L('文章在回收站', 'In trash')
-          : editing
-            ? L('保存修改', 'Save changes')
-            : L('发布文章', 'Publish post')) + '</button>' +
+      publishButtonText() + '</button>' +
       (editing
         ? '<a class="op" href="' + esc(rendererUrlFromMarkdown(d.content)) + '" target="_blank" rel="noopener">' +
           L('新标签页预览', 'Preview in new tab') + '</a>' +
-          '<a class="op" href="' + hrefFor('index.html', '#/post/' + encodeURIComponent(state.editingSlug)) +
-          '" target="_blank" rel="noopener">' + L('查看文章', 'View post') + '</a>'
+          (state.draftStatus === 'published'
+            ? '<a class="op" href="' + hrefFor('index.html', '#/post/' + encodeURIComponent(state.editingSlug)) +
+              '" target="_blank" rel="noopener">' + L('查看文章', 'View post') + '</a>'
+            : '')
         : '<button class="op" data-action="clear-draft">' + L('清空', 'Clear') + '</button>') +
       '</div>' +
       '<p class="hint">' +
       (editing
-        ? L(
-          '正在编辑 ' + esc(state.editingSlug) + (state.currentVersion ? ' · 第 ' + state.currentVersion + ' 版' : ''),
-          'Editing ' + esc(state.editingSlug) + (state.currentVersion ? ' · v' + state.currentVersion : '')
-        )
-        : L('发布后立即出现在文章列表，并保存第一个版本。', 'Goes live immediately and saves version 1.')) +
+        ? (state.role === 'author'
+          ? (state.draftStatus === 'published'
+            ? L('修改需管理员审核，通过后公开页面才会更新。', 'Edits need admin approval before the public page updates.')
+            : L('保存后会重新进入审核，通过后才会公开。', 'Saving sends it back for review. It goes public once approved.'))
+          : L(
+            '正在编辑 ' + esc(state.editingSlug) + (state.currentVersion ? ' · 第 ' + state.currentVersion + ' 版' : ''),
+            'Editing ' + esc(state.editingSlug) + (state.currentVersion ? ' · v' + state.currentVersion : '')
+          ))
+        : (state.role === 'author'
+          ? L('提交后需管理员审核通过才会公开。', 'Submitted posts go public after an admin approves them.')
+          : L('发布后立即出现在文章列表，并保存第一个版本。', 'Goes live immediately and saves version 1.'))) +
       '</p>' +
       '</section>'
     );
@@ -1079,7 +1166,9 @@
       create: L('创建', 'Created'),
       update: L('编辑', 'Edited'),
       delete: L('删除', 'Deleted'),
-      restore: L('恢复', 'Restored')
+      restore: L('恢复', 'Restored'),
+      approve: L('审核通过', 'Approved'),
+      reject: L('驳回', 'Rejected')
     };
     var rows = state.versions.length
       ? state.versions
@@ -1177,15 +1266,34 @@
     );
   }
 
+  function reviewBadges(post) {
+    var badges = '';
+    if (post.status === 'pending') {
+      badges += '<span class="badge pending">' + L('待审核', 'Pending') + '</span>';
+    } else if (post.status === 'rejected') {
+      badges += '<span class="badge rejected"' +
+        (post.review_note ? ' title="' + esc(post.review_note) + '"' : '') + '>' +
+        L('已驳回', 'Rejected') + '</span>';
+    }
+    if (post.pending_edit) {
+      badges += '<span class="badge edit">' + L('修改待审核', 'Edit pending') + '</span>';
+    }
+    return badges;
+  }
+
   function statsPanel() {
     var active = state.adminPosts.filter(function (p) {
       return !p.deleted;
     }).length;
     var deleted = state.adminPosts.length - active;
+    var pending = state.adminPosts.filter(function (p) {
+      return !p.deleted && (p.status === 'pending' || p.pending_edit);
+    }).length;
     return (
       '<section class="panel glass mini-panel"><div class="panel-head"><h2 class="panel-title">' +
       L('统计', 'Stats') + '</h2></div>' +
       '<div class="stat-row"><span>' + L('在用', 'Active') + '</span><span class="stat-num">' + active + '</span></div>' +
+      '<div class="stat-row"><span>' + L('待审核', 'Pending') + '</span><span class="stat-num">' + pending + '</span></div>' +
       '<div class="stat-row"><span>' + L('回收站', 'Trash') + '</span><span class="stat-num">' + deleted + '</span></div>' +
       '<p class="hint">' +
       L('删除的文章保留全部历史版本，可随时恢复。', 'Deleted posts keep every version and can be restored at any time.') +
@@ -1204,15 +1312,25 @@
           .map(function (post) {
             var selectable = state.isAdmin && !post.deleted;
             var selected = selectable && Boolean(state.selectedSlugs[post.slug]);
+            var reviewOps = state.isAdmin && !post.deleted &&
+              (post.status === 'pending' || post.status === 'rejected' || post.pending_edit)
+              ? '<button class="op review-approve" data-action="approve-post" data-slug="' + esc(post.slug) + '">' +
+                (post.pending_edit ? L('通过修改', 'Approve edit') : L('通过', 'Approve')) + '</button>' +
+                '<button class="op" data-action="reject-post" data-slug="' + esc(post.slug) + '">' +
+                (post.pending_edit ? L('驳回修改', 'Reject edit') : L('驳回', 'Reject')) + '</button>'
+              : '';
             var ops = post.deleted
               ? '<button class="op" data-action="restore-post" data-slug="' + esc(post.slug) + '">' +
                 L('恢复', 'Restore') + '</button>' +
                 '<button class="op" data-action="view-versions" data-slug="' + esc(post.slug) + '">' +
                 L('版本', 'Versions') + '</button>'
-              : '<a class="op" href="' + hrefFor('index.html', '#/post/' + encodeURIComponent(post.slug)) +
-                '" target="_blank" rel="noopener">' + L('查看', 'View') + '</a>' +
+              : (post.status === 'published'
+                ? '<a class="op" href="' + hrefFor('index.html', '#/post/' + encodeURIComponent(post.slug)) +
+                  '" target="_blank" rel="noopener">' + L('查看', 'View') + '</a>'
+                : '') +
                 '<button class="op" data-action="edit-post" data-slug="' + esc(post.slug) + '">' +
                 L('编辑', 'Edit') + '</button>' +
+                reviewOps +
                 (state.isAdmin
                   ? '<button class="op" data-action="delete-post" data-slug="' + esc(post.slug) + '">' +
                     L('删除', 'Delete') + '</button>'
@@ -1227,7 +1345,7 @@
                   L('选择文章', 'Select post') + '"></label>'
                 : '') +
               '<div class="manage-main">' +
-              '<div class="manage-title">' + esc(post.title) + postBadges(post) +
+              '<div class="manage-title">' + esc(post.title) + postBadges(post) + reviewBadges(post) +
               (post.deleted ? '<span class="badge">' + L('回收站', 'Trash') + '</span>' : '') + '</div>' +
               '<div class="manage-meta">' + esc(fmtDate(post.created_at)) + ' · ' + esc(post.author) + ' · ' +
               esc(post.category) + ' · ' + L(Number(post.views || 0) + ' 次浏览',
@@ -1261,6 +1379,60 @@
         : '') +
       '</div>' +
       '<div class="manage-list">' + rows + '</div>'
+    );
+  }
+
+  function reviewHtml() {
+    var items = state.reviewItems;
+    var rows = items.length
+      ? items.map(function (item) {
+        var key = item.type + ':' + item.slug;
+        var open = state.reviewPreview === key;
+        var isEdit = item.type === 'edit';
+        var currentNote = isEdit && item.current && item.current.title !== item.title
+          ? '<div class="review-current">' + L('当前标题', 'Current title') + '：' +
+            esc(item.current.title) + '</div>'
+          : '';
+        return (
+          '<div class="review-row">' +
+          '<div class="review-head">' +
+          '<span class="badge ' + (isEdit ? 'edit' : 'pending') + '">' +
+          (isEdit ? L('修改', 'Edit') : L('新文章', 'New post')) + '</span>' +
+          '<span class="review-title">' + esc(item.title) + '</span>' +
+          '</div>' +
+          '<div class="review-meta">' + esc(item.author) + ' · ' + esc(item.category) + ' · ' +
+          L('提交于 ', 'submitted ') + esc(fmtDate(item.submitted_at)) + '</div>' +
+          currentNote +
+          '<p class="review-excerpt">' + esc(item.excerpt) + '</p>' +
+          '<div class="review-ops">' +
+          '<button class="op" data-action="preview-review" data-key="' + esc(key) + '">' +
+          (open ? L('收起预览', 'Hide preview') : L('预览内容', 'Preview')) + '</button>' +
+          (isEdit
+            ? '<a class="op" href="' + hrefFor('index.html', '#/post/' + encodeURIComponent(item.slug)) +
+              '" target="_blank" rel="noopener">' + L('查看当前版本', 'View live') + '</a>'
+            : '') +
+          '<button class="op review-approve" data-action="approve-post" data-slug="' + esc(item.slug) + '">' +
+          L('通过', 'Approve') + '</button>' +
+          '<button class="op" data-action="reject-post" data-slug="' + esc(item.slug) + '">' +
+          L('驳回', 'Reject') + '</button>' +
+          '</div>' +
+          (open
+            ? '<div class="review-preview"><iframe class="reader-frame" src="' +
+              esc(rendererUrlFromMarkdown(item.content)) + '" title="' + esc(item.title) +
+              '" loading="lazy" referrerpolicy="no-referrer"></iframe></div>'
+            : '') +
+          '</div>'
+        );
+      }).join('')
+      : '<div class="empty-state"><p class="empty-title">' + L('没有待审核的内容', 'Nothing to review') +
+        '</p><p class="empty-text">' +
+        L('作者发布或修改文章后，会先出现在这里。', 'Posts and edits submitted by authors appear here first.') +
+        '</p></div>';
+
+    return (
+      '<div class="manage-list-head"><h2 class="panel-title">' + L('审核', 'Review') + '</h2>' +
+      '<span class="panel-note">' + (items.length ? items.length + ' ' + L('项', 'item(s)') : '') + '</span></div>' +
+      '<div class="review-list">' + rows + '</div>'
     );
   }
 
@@ -1708,15 +1880,7 @@
     var btn = document.querySelector('.publish-button');
     if (!btn) return;
     btn.disabled = state.saving || state.aiBusy || state.editingDeleted;
-    btn.textContent = state.aiBusy
-      ? L('AI 生成中…', 'Generating…')
-      : state.saving
-        ? L('保存中…', 'Saving…')
-        : state.editingDeleted
-          ? L('文章在回收站', 'In trash')
-          : state.editingSlug
-            ? L('保存修改', 'Save changes')
-            : L('发布文章', 'Publish post');
+    btn.textContent = publishButtonText();
   }
 
   async function savePost() {
@@ -1793,15 +1957,36 @@
         ? await request('/posts/' + encodeURIComponent(editingSlug), { method: 'PUT', body: payload, auth: true })
         : await request('/posts', { method: 'POST', body: payload, auth: true });
       state.saving = false;
+      if (data.pending) {
+        state.draftPendingEdit = {
+          status: 'pending',
+          note: '',
+          submitted_at: new Date().toISOString()
+        };
+        setStatus(L(
+          '修改已提交审核，管理员通过后生效',
+          'Edit submitted for review; it takes effect after admin approval'
+        ));
+        await renderRoute();
+        return;
+      }
       var post = data.post;
+      state.draftStatus = post.status || 'published';
+      state.draftNote = post.review_note || '';
       if (!editingSlug) {
         state.editingSlug = post.slug;
         state.draft = postToDraft(post);
-        setStatus(L('文章已发布', 'Post published'));
+        state.draftPendingEdit = null;
+        setStatus(post.status === 'pending'
+          ? L('已提交审核，管理员通过后公开', 'Submitted for review; it goes public after admin approval')
+          : L('文章已发布', 'Post published'));
         location.hash = '#/admin/edit/' + encodeURIComponent(post.slug);
       } else {
         state.draft = postToDraft(post);
-        setStatus(L('修改已保存，新版本已记录', 'Changes saved as a new version'));
+        state.draftPendingEdit = null;
+        setStatus(state.role === 'author'
+          ? L('已保存并重新提交审核', 'Saved and resubmitted for review')
+          : L('修改已保存，新版本已记录', 'Changes saved as a new version'));
         await renderRoute();
       }
     } catch (e) {
@@ -1823,6 +2008,39 @@
       if (state.editingSlug === slug) startNewDraft();
       if (redirect) location.hash = '#/';
       else await renderRoute();
+    } catch (e) {
+      if (!authError(e)) setStatus(e.message, 'error');
+    }
+  }
+
+  async function approvePost(slug) {
+    if (!slug || !state.isAdmin) return;
+    try {
+      var data = await request('/admin/posts/' + encodeURIComponent(slug) + '/approve', {
+        method: 'POST',
+        auth: true
+      });
+      setStatus(data.applied === 'edit'
+        ? L('修改已通过并公开', 'Edit approved and published')
+        : L('文章已通过并公开', 'Post approved and published'));
+      await renderRoute();
+    } catch (e) {
+      if (!authError(e)) setStatus(e.message, 'error');
+    }
+  }
+
+  async function rejectPost(slug) {
+    if (!slug || !state.isAdmin) return;
+    var note = window.prompt(L('驳回理由（可留空）', 'Reason for rejection (optional)'), '');
+    if (note === null) return;
+    try {
+      await request('/admin/posts/' + encodeURIComponent(slug) + '/reject', {
+        method: 'POST',
+        body: { note: note },
+        auth: true
+      });
+      setStatus(L('已驳回', 'Rejected'));
+      await renderRoute();
     } catch (e) {
       if (!authError(e)) setStatus(e.message, 'error');
     }
@@ -1850,7 +2068,14 @@
         '/posts/' + encodeURIComponent(state.editingSlug) + '/versions/' + version + '/restore',
         { method: 'POST', auth: true }
       );
+      if (data.pending) {
+        state.draftPendingEdit = { status: 'pending', note: '', submitted_at: new Date().toISOString() };
+        setStatus(L('恢复内容已提交审核，通过后生效', 'Restored content submitted for review'));
+        await renderRoute();
+        return;
+      }
       state.draft = postToDraft(data.post);
+      state.draftStatus = data.post.status || 'published';
       state.editingSlug = data.post.slug;
       setStatus(L(
         '已恢复到第 ' + version + ' 版，并生成新版本',
@@ -2239,6 +2464,22 @@
         state.adminTab = 'manage';
         if (state.route && state.route.edit) location.hash = '#/admin';
         else renderRoute();
+        break;
+      case 'admin-review':
+        if (!state.isAdmin) break;
+        state.adminTab = 'review';
+        if (state.route && state.route.edit) location.hash = '#/admin';
+        else renderRoute();
+        break;
+      case 'approve-post':
+        approvePost(slug);
+        break;
+      case 'reject-post':
+        rejectPost(slug);
+        break;
+      case 'preview-review':
+        state.reviewPreview = state.reviewPreview === target.dataset.key ? '' : (target.dataset.key || '');
+        view.innerHTML = adminHtml();
         break;
       case 'admin-logs':
         if (!state.isAdmin) break;

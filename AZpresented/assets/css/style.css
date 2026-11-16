@@ -1228,8 +1228,88 @@ body.article-view .reader-shell {
   border-color: var(--az-accent-alpha);
 }
 
+.badge.pending {
+  background: var(--az-hover-tint);
+}
+
+.badge.rejected {
+  color: var(--az-placeholder);
+  border-color: var(--az-border);
+}
+
+.badge.edit {
+  border-style: dashed;
+}
+
 .post-title .badge,
 .article-title .badge { margin-left: 8px; }
+
+.tab-count {
+  margin-left: 3px;
+  font-size: 10px;
+}
+
+/* review */
+
+.review-list {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  margin: 0 -8px;
+  padding: 0 8px;
+}
+
+.review-row {
+  padding: 12px 4px;
+  border-bottom: 1px solid var(--az-border);
+}
+
+.review-row:last-child { border-bottom: 0; }
+
+.review-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.review-title {
+  font-size: 16px;
+  line-height: 1.4;
+  color: var(--az-accent);
+}
+
+.review-meta,
+.review-current {
+  margin-top: 2px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--az-placeholder);
+}
+
+.review-excerpt {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--az-text-soft);
+}
+
+.review-ops {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.review-approve { color: var(--az-accent); }
+
+.review-preview {
+  margin-top: 10px;
+  height: 52vh;
+  min-height: 320px;
+}
+
+.review-preview .reader-frame { height: 100%; }
 
 /* flags */
 
