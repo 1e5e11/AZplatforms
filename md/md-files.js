@@ -1,7 +1,9 @@
 /* Browser file saving: a handle is adopted only after a successful write. */
 (() => {
   'use strict';
-  const types = [{ description:'Markdown 文档', accept:{ 'text/markdown':['.md', '.markdown'] } }];
+  const types = [
+    { description:'Markdown / LaTeX 文档', accept:{ 'text/markdown':['.md', '.markdown'], 'text/x-tex':['.tex', '.latex', '.ltx'] } }
+  ];
   function download(blob, name) {
     const url = URL.createObjectURL(blob), link = document.createElement('a');
     link.href = url; link.download = name; document.body.append(link); link.click(); link.remove();
@@ -25,7 +27,7 @@
       try {
         let handle = asNew ? null : this.handle;
         if (!handle && typeof window.showSaveFilePicker !== 'function') {
-          download(new Blob([text], { type:'text/markdown;charset=utf-8' }), this.name);
+          download(new Blob([text], { type:/\.(tex|latex|ltx)$/i.test(this.name) ? 'text/x-tex;charset=utf-8' : 'text/markdown;charset=utf-8' }), this.name);
           this.onStatus('已下载 Markdown 副本。当前浏览器无法覆盖原文件，请使用 Chrome / Edge 的打开文件与保存功能。');
           return;
         }

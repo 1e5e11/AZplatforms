@@ -63,6 +63,22 @@ $$
   let fileSession;
   const host = pure ? $('readerDocument') : $('document');
   if (pure) { $('workspace').remove(); $('readerRoot').hidden = false; }
+  let documentFormat = 'markdown', formatLocked = false;
+  const LATEX_EXT = /\.(tex|latex|ltx)$/i, MARKDOWN_EXT = /\.(md|markdown)$/i;
+  function detectLatexDocument(text) {
+    const start = text.replace(/^\uFEFF/, '').replace(/^(?:\s*%[^\n]*\n)*\s*/, '');
+    return /^\\documentclass\b/.test(start) || /^\\begin\s*\{document\}/.test(start);
+  }
+  function formatFor(text, name = '') {
+    if (LATEX_EXT.test(name)) return { format:'latex', locked:true };
+    if (MARKDOWN_EXT.test(name)) return { format:'markdown', locked:true };
+    return { format:detectLatexDocument(text) ? 'latex' : 'markdown', locked:false };
+  }
+  function setDocumentFormat(format, locked = true) {
+    documentFormat = format; formatLocked = locked;
+    const title = $('editorTitle'); if (title) title.textContent = format === 'latex' ? 'LaTeX 原文' : 'Markdown 原文';
+    const editor = $('editor'); if (editor) editor.placeholder = format === 'latex' ? '在左侧粘贴或输入 LaTeX…' : '在左侧粘贴或输入 Markdown…';
+  }
 
   function status(message) { if (!pure) $('status').textContent = message; }
   function fail(message) {
@@ -76,7 +92,7 @@ $$
     const hasFragmentSource = fragment.has('md') || fragment.has('src');
     if (hasFragmentSource && (query.has('md') || query.has('src'))) throw new Error('正文来源不能同时出现在查询参数和片段中。');
     const params = hasFragmentSource ? fragment : query;
-    for (const key of ['md','src','images','base','page','anchor']) if (params.getAll(key).length > 1) throw new Error(`参数 ${key} 不能重复。`);
+    for (const key of ['md','src','images','base','format','page','anchor']) if (params.getAll(key).length > 1) throw new Error(`参数 ${key} 不能重复。`);
     if (params.has('md') && params.has('src')) throw new Error('md 与 src 只能传入一个。');
     return { params, inFragment: hasFragmentSource };
   }
@@ -92,9 +108,9 @@ $$
     return url;
   }
   function parseDocument(markdown) {
-    const result = renderEngine.parse(markdown, { baseURL, images:localImages });
+    const result = renderEngine.parse(markdown, { baseURL, images:localImages, format:documentFormat });
     pages = result.pages; headings = result.headings;
-    document.title = headings[0]?.text || (pure ? 'Markdown' : '墨页 · Markdown 阅读与编辑');
+    document.title = headings[0]?.text || (pure ? (documentFormat === 'latex' ? 'LaTeX' : 'Markdown') : '墨页 · Markdown 阅读与编辑');
   }
   function navigationURL(page, anchor = '') {
     const url = new URL(location.href);
@@ -107,6 +123,7 @@ $$
     } else {
       // Modified clicks and "open link in new tab" must also open the current document.
       const params = new URLSearchParams(sourceURL ? { src: sourceURL } : { md: sourceText });
+      if (documentFormat === 'latex') params.set('format', 'latex');
       if (!sourceURL) addImageParameters(params);
       params.set('page', String(page)); if (anchor) params.set('anchor', anchor);
       url.search = ''; url.hash = params.toString();
@@ -148,7 +165,7 @@ $$
       }
       host.append(content);
     }
-    if (!sourceText.trim() && !pure) { const p = document.createElement('p'); p.className = 'empty'; p.textContent = '在左侧写下第一行，或打开一份 Markdown 文件。'; host.append(p); }
+    if (!sourceText.trim() && !pure) { const p = document.createElement('p'); p.className = 'empty'; p.textContent = '在左侧写下第一行，或打开一份 Markdown / LaTeX 文件。'; host.append(p); }
     if (!pure) {
       $('outline').replaceChildren(makeTOC()); $('headingCount').textContent = `${headings.length} 节`;
       $('viewOutline').replaceChildren(makeTOC()); $('viewHeadingCount').textContent = `${headings.length} 节`;
@@ -167,6 +184,19 @@ $$
     showPage(page, anchor, true);
   }
   document.addEventListener('click', event => {
+    const svgToggle = event.target.closest('.toggle-svg-source');
+    if (svgToggle && host.contains(svgToggle)) {
+      const block = svgToggle.closest('.svg-block');
+      const preview = block?.querySelector('.svg-preview'), pre = block?.querySelector('pre');
+      if (preview && pre) {
+        const showSource = !preview.hidden;
+        preview.hidden = showSource; pre.hidden = !showSource;
+        svgToggle.textContent = showSource ? '查看图形' : '查看代码';
+        svgToggle.setAttribute('aria-label', showSource ? '查看 SVG 图形' : '查看 SVG 源代码');
+        svgToggle.setAttribute('aria-pressed', String(showSource));
+      }
+      return;
+    }
     const button = event.target.closest('.copy-code');
     if (button && host.contains(button)) {
       const raw = button.closest('.code-block').querySelector('pre > code').textContent;
@@ -189,6 +219,10 @@ $$
   });
   function render(text, page = 1, anchor = '', announce = true) {
     if (new TextEncoder().encode(text).length > MAX_BYTES) throw new Error('文档超过 2 MiB，请拆分后载入。');
+    if (!formatLocked) {
+      if (!text.trim()) setDocumentFormat('markdown', false);
+      else if (documentFormat !== 'latex' && detectLatexDocument(text)) setDocumentFormat('latex', false);
+    }
     sourceText = text; parseDocument(text); showPage(page, anchor);
     if (!pure) { $('charCount').textContent = `${text.length.toLocaleString()} 字`; if (announce) status(`已排版 · ${pages.length} 页 · ${headings.length} 个标题`); }
   }
@@ -217,9 +251,11 @@ $$
     try {
       const result = await fetchMarkdown(address); if (request !== requestNumber) return;
       baseURL = result.url; sourceURL = result.url; localImages = new Map(); openedFileName = '';
+      const remoteName = decodeURIComponent(new URL(sourceURL).pathname.split('/').pop() || '');
+      const info = formatFor(result.text, remoteName); setDocumentFormat(info.format, info.locked);
       if (!pure) $('folderDocument').hidden = true;
       if (pure) { const { params } = parameters(); render(result.text, pageOption(params), params.get('anchor') || (!location.hash.includes('=') ? decodeURIComponent(location.hash.slice(1)) : '')); }
-      else { setEditorValue(result.text); $('source').value = sourceURL; const name = decodeURIComponent(new URL(sourceURL).pathname.split('/').pop() || '远程文档.md'); fileSession.reset(result.text, /\.(md|markdown)$/i.test(name) ? name : `${name}.md`); render(result.text); }
+      else { setEditorValue(result.text); $('source').value = sourceURL; fileSession.reset(result.text, /\.(md|markdown|tex|latex|ltx)$/i.test(remoteName) ? remoteName : `${remoteName || '远程文档'}.${documentFormat === 'latex' ? 'tex' : 'md'}`); render(result.text); }
     } catch (error) { if (request === requestNumber) { if (pure) fail(error.message); else status(error.message); } }
   }
   function stopLoad() { requestNumber++; controller?.abort(); sourceURL = ''; }
@@ -241,11 +277,13 @@ $$
       box.addEventListener('blur', () => box.remove(), { once:true }); return false;
     }
   }
-  if (!window.marked || !window.DOMPurify || !window.hljs || !window.katex || !window.MoyeMarkdownEngine || !window.MoyeImages) { fail('Markdown 显示引擎或依赖组件未加载，请检查相关文件是否完整后刷新。'); return; }
+  if (!window.marked || !window.DOMPurify || !window.hljs || !window.katex || !window.MoyeMarkdownEngine || !window.MoyeLatex || !window.MoyeImages) { fail('Markdown/LaTeX 显示引擎或依赖组件未加载，请检查相关文件是否完整后刷新。'); return; }
   renderEngine = new MoyeMarkdownEngine({ baseURL });
   if (pure) {
     try {
       const { params } = parameters(); pageOption(params);
+      const requestedFormat = params.get('format');
+      setDocumentFormat(requestedFormat === 'latex' ? 'latex' : 'markdown', Boolean(requestedFormat));
       localImages = MoyeImages.decodeImages(params.get('images'));
       if (params.has('md') && params.has('base')) {
         const url = new URL(params.get('base'), location.href);
@@ -313,10 +351,12 @@ $$
   function updateEditorHighlight() {
     const raw = editor.value;
     const input = raw.endsWith('\n') ? `${raw} ` : raw;
-    try { editorHighlight.innerHTML = DOMPurify.sanitize(hljs.highlight(input, { language:'markdown', ignoreIllegals:true }).value, { ALLOWED_TAGS:['span'], ALLOWED_ATTR:['class'] }); }
+    const language = documentFormat === 'latex' && hljs.getLanguage('latex') ? 'latex' : 'markdown';
+    try { editorHighlight.innerHTML = DOMPurify.sanitize(hljs.highlight(input, { language, ignoreIllegals:true }).value, { ALLOWED_TAGS:['span'], ALLOWED_ATTR:['class'] }); }
     catch { editorHighlight.textContent = input; }
   }
   function setEditorValue(value) { editor.value = value; updateEditorHighlight(); }
+  setDocumentFormat('markdown', false);
   setEditorValue(EXAMPLE); fileSession.reset(EXAMPLE, '阅读示例.md'); render(EXAMPLE);
   $('editMode').onclick = () => setMode('edit');
   $('viewMode').onclick = () => setMode('view');
@@ -328,20 +368,25 @@ $$
     updateEditorHighlight(); fileSession.changed(); stopLoad(); clearTimeout(revisionTimer);
     const previousStatus = $('status').textContent;
     // A pending preview must not replace a newer save or export result message.
-    revisionTimer = setTimeout(() => { try { render(editor.value, currentPage, '', $('status').textContent === previousStatus); } catch (error) { status(error.message); } }, 120);
+    revisionTimer = setTimeout(() => {
+      const before = documentFormat;
+      try { render(editor.value, currentPage, '', $('status').textContent === previousStatus); } catch (error) { status(error.message); }
+      if (before !== documentFormat) updateEditorHighlight();
+    }, 120);
   });
-  $('example').onclick = () => { stopLoad(); openedFileName = ''; $('folderDocument').hidden = true; localImages = new Map(); baseURL = location.href; setEditorValue(EXAMPLE); fileSession.reset(EXAMPLE, '阅读示例.md'); render(EXAMPLE); };
-  $('clear').onclick = () => { stopLoad(); openedFileName = ''; $('folderDocument').hidden = true; localImages = new Map(); baseURL = location.href; setEditorValue(''); $('source').value = ''; fileSession.reset(''); render(''); editor.focus(); };
+  $('example').onclick = () => { stopLoad(); openedFileName = ''; $('folderDocument').hidden = true; localImages = new Map(); baseURL = location.href; setDocumentFormat('markdown', false); setEditorValue(EXAMPLE); fileSession.reset(EXAMPLE, '阅读示例.md'); render(EXAMPLE); };
+  $('clear').onclick = () => { stopLoad(); openedFileName = ''; $('folderDocument').hidden = true; localImages = new Map(); baseURL = location.href; setDocumentFormat('markdown', false); setEditorValue(''); $('source').value = ''; fileSession.reset(''); render(''); editor.focus(); };
   $('sourceForm').onsubmit = event => { event.preventDefault(); if ($('source').value.trim()) loadAddress($('source').value.trim()); else status('请先输入文件地址。'); };
   async function openFile(file, files = [file], handle = null) {
     if (!file) return; stopLoad(); const request = requestNumber;
-    if (!/\.(md|markdown)$/i.test(file.name)) { status('请选择 .md 或 .markdown 文件。'); return; }
+    if (!/\.(md|markdown|tex|latex|ltx)$/i.test(file.name)) { status('请选择 Markdown 或 LaTeX 文件。'); return; }
     if (file.size > MAX_BYTES) { status('文档超过 2 MiB，请拆分后载入。'); return; }
     try {
       const text = new TextDecoder('utf-8', { fatal:true }).decode(await file.arrayBuffer()); if (request !== requestNumber) return;
       const images = await MoyeImages.readImages(files, location.href); if (request !== requestNumber) return;
       localImages = images; baseURL = MoyeImages.fileURL(file.webkitRelativePath || file.name, location.href);
       openedFileName = file.name;
+      const info = formatFor(text, file.name); setDocumentFormat(info.format, info.locked);
       setEditorValue(text); fileSession.reset(text, file.name, handle); $('source').value = ''; render(text);
     } catch (error) { if (request === requestNumber) status(error instanceof TypeError ? '文件读取失败，请确认文件采用 UTF-8 编码。' : error.message); }
   }
@@ -367,24 +412,24 @@ $$
     } catch (error) { if (request === requestNumber) status(error.message); }
   }
   function openFiles(files, handles = new Map()) {
-    const documents = files.filter(file => /\.(md|markdown)$/i.test(file.name));
+    const documents = files.filter(file => /\.(md|markdown|tex|latex|ltx)$/i.test(file.name));
     if (documents.length > 1) {
-      const select = $('folderDocument'); select.replaceChildren(new Option('选择 Markdown 文档…', ''));
+      const select = $('folderDocument'); select.replaceChildren(new Option('选择文档…', ''));
       documents.forEach((file, index) => select.append(new Option(file.webkitRelativePath || file.name, String(index))));
       select.hidden = false;
       select.onchange = () => { if (select.value !== '') { const file = documents[Number(select.value)]; openFile(file, files, handles.get(file)); } };
-      status('请选择要打开的 Markdown 文档，配图会一起载入。'); return;
+      status('请选择要打开的 Markdown 或 LaTeX 文档，配图会一起载入。'); return;
     }
     $('folderDocument').hidden = true;
     if (documents.length) return openFile(documents[0], files, handles.get(documents[0]));
     if (files.some(MoyeImages.imageType)) return importImages(files);
-    status('请选择 Markdown 文件或 PNG、JPEG、GIF、WebP、AVIF、BMP、ICO、SVG 图片。');
+    status('请选择 Markdown / LaTeX 文件或 PNG、JPEG、GIF、WebP、AVIF、BMP、ICO、SVG 图片。');
   }
   async function readDirectory(directory, prefix = directory.name, files = [], handles = new Map()) {
     for await (const child of directory.values()) {
       if (child.kind === 'directory') await readDirectory(child, `${prefix}/${child.name}`, files, handles);
       else {
-        if (!/\.(md|markdown|png|jpe?g|gif|webp|avif|bmp|ico|svg)$/i.test(child.name)) continue;
+        if (!/\.(md|markdown|tex|latex|ltx|png|jpe?g|gif|webp|avif|bmp|ico|svg)$/i.test(child.name)) continue;
         if (files.length >= 1000) throw new Error('文件夹中可用文件超过 1,000 个，请选择较小的文件夹。');
         const file = await child.getFile();
         Object.defineProperty(file, 'webkitRelativePath', { value:`${prefix}/${child.name}` });
@@ -417,7 +462,7 @@ $$
   };
   $('openImages').onclick = () => $('images').click();
   $('images').onchange = () => { const files = [...$('images').files]; $('images').value = ''; if (files.length) importImages(files); };
-  $('copySource').onclick = () => copy(editor.value, 'Markdown 原文已复制');
+  $('copySource').onclick = () => copy(editor.value, '原文已复制');
   document.addEventListener('dragover', event => { if (event.dataTransfer.types.includes('Files')) event.preventDefault(); });
   document.addEventListener('drop', async event => {
     if (!event.dataTransfer.files.length && ![...event.dataTransfer.items].some(item => item.kind === 'file')) return;
@@ -442,6 +487,7 @@ $$
     const params = new URLSearchParams();
     if (sourceURL && sourceText === $('editor').value) params.set('src', sourceURL);
     else { params.set('md', $('editor').value); addImageParameters(params); }
+    if (documentFormat === 'latex') params.set('format', 'latex');
     params.set('page', String(currentPage)); url.hash = params.toString();
     if (url.href.length > 64000) { status('正文或图片使链接超过 64,000 字符。请复制 HTML，或将 Markdown 和图片托管后使用 src 分享。'); return; }
     copy(url.href, '阅读链接已复制 · 打开后仅显示文档');
@@ -451,6 +497,12 @@ $$
     const exportHost = document.createElement('article'); exportHost.className = 'markdown';
     for (let i = 0; i < pages.length; i++) { const page = pages[i].cloneNode(true); for (const slot of page.querySelectorAll('[data-directive]')) { if (slot.dataset.directive === 'toc') { const toc = makeTOC(); for (const a of toc.querySelectorAll('a')) { a.href = `#${encodeURIComponent(a.dataset.anchor)}`; a.removeAttribute('data-page'); a.removeAttribute('data-anchor'); } slot.replaceWith(toc); } else slot.remove(); } for (const heading of page.querySelectorAll('[id^="md-heading-"]')) heading.id = heading.id.slice('md-heading-'.length); exportHost.append(page); }
     for (const bar of exportHost.querySelectorAll('.code-bar')) bar.remove();
+    // 导出始终使用图形预览，而不是用户当时切换出的源代码。
+    for (const block of exportHost.querySelectorAll('.svg-block')) {
+      const preview = block.querySelector('.svg-preview'), pre = block.querySelector('pre');
+      if (preview) preview.hidden = false;
+      pre?.remove();
+    }
     return exportHost;
   }
   $('copyHtml').onclick = () => {
@@ -458,7 +510,7 @@ $$
     try { exportHost = buildExportHost(); } catch (error) { status(error.message); return; }
     const syntaxCSS = document.getElementById('codeTheme').textContent;
     const mathCSS = exportKaTeXStyles();
-    copy(`<style>del{color:#7c0a21;text-decoration-thickness:2px}.document-page+.document-page{break-before:page}img,svg{max-width:100%;height:auto}pre{overflow:auto;white-space:pre}code{font-family:Consolas,monospace}.math-display{overflow-x:auto;text-align:center}${syntaxCSS}${mathCSS}</style>\n${exportHost.outerHTML}`, '全文 HTML 已复制');
+    copy(`<style>del{color:#7c0a21;text-decoration-thickness:2px}.document-page+.document-page{break-before:page}img,svg{max-width:100%;height:auto}.svg-preview{display:flex;justify-content:center;padding:16px}.svg-preview[hidden],.svg-block pre[hidden]{display:none!important}pre{overflow:auto;white-space:pre}code{font-family:Consolas,monospace}.math-display{overflow-x:auto;text-align:center}.latex-title{margin:0 0 34px;padding:0 0 22px;border-bottom:1px solid #7c0a2164;text-align:center}.latex-author,.latex-date{margin:4px 0;color:#6d6567}.latex-number{color:#7c0a21;margin-right:.4em}.latex-section-label{margin:0 0 8px;color:#7c0a21;font-weight:bold}.latex-abstract{margin:24px 0;padding:12px 20px;border-left:2px solid #7c0a21;background:#7c0a2109}.latex-figure{margin:26px 0;text-align:center}.latex-figure figcaption{margin-top:8px;font-size:14px;color:#6d6567}.latex-table-wrap{margin:20px 0;overflow:auto}.latex-theorem{margin:22px 0;padding:12px 18px;border-left:2px solid #7c0a21;background:#7c0a2109}.latex-theorem-head{margin:0 0 8px;color:#7c0a21}.latex-qed{float:right}.latex-footnotes,.latex-bibliography{margin-top:32px;padding-top:16px;border-top:1px solid #7c0a2164;font-size:14px}.latex-center{text-align:center}.latex-flushleft{text-align:left}.latex-flushright{text-align:right}.latex-environment{margin:18px 0;padding:6px 0 6px 16px;border-left:1px dashed #7c0a2164}.latex-env-label{margin:0 0 6px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#6d6567}.latex-cite,.latex-ref{color:#7c0a21}.latex-smallcaps{font-variant:small-caps}.latex-fbox{padding:0 .3em;border:1px solid #7c0a2164}.latex-note{color:#6d6567;font-size:14px}.latex-fallback{white-space:pre-wrap;overflow-wrap:anywhere}${syntaxCSS}${mathCSS}</style>\n${exportHost.outerHTML}`, '全文 HTML 已复制');
   };
   $('exportFormat').addEventListener('change', () => { $('pdfMode').hidden = $('exportFormat').value !== 'pdf'; });
   $('exportFile').onclick = async () => {
@@ -469,7 +521,7 @@ $$
     try {
       clearTimeout(revisionTimer);
       const exportHost = buildExportHost(), syntax = $('codeTheme').textContent;
-      const name = fileSession.name.replace(/\.(md|markdown)$/i, '') || '未命名';
+      const name = fileSession.name.replace(/\.(md|markdown|tex|latex|ltx)$/i, '') || '未命名';
       status(`正在导出 ${label} 全文…`);
       let blob;
       if (format === 'html') blob = await MoyeExport.html(exportHost, syntax, exportKaTeXStyles(), name);

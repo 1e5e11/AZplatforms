@@ -17,6 +17,17 @@
     .moye-export code{font-family:Consolas,'Liberation Mono',monospace;font-size:.86em}.moye-export pre code{font-size:inherit}
     .moye-export :not(pre)>code{padding:2px 4px;background:#7c0a2109}
     .moye-export .code-block{margin:20px 0;border:1px solid #7c0a2164;border-radius:.15em;overflow:hidden}.moye-export .code-block pre{border:0}
+    .moye-export .svg-block .svg-preview{display:flex;justify-content:center;padding:18px}.moye-export .svg-block .svg-preview[hidden],.moye-export .svg-block pre[hidden]{display:none!important}
+    .moye-export .latex-title{margin:0 0 34px;padding:0 0 22px;border-bottom:1px solid #7c0a2164;text-align:center}
+    .moye-export .latex-title h1{font-size:32px;margin:0 0 10px}.moye-export .latex-author,.moye-export .latex-date{margin:4px 0;color:#6d6567}
+    .moye-export .latex-number{color:#7c0a21;margin-right:.4em}.moye-export .latex-section-label{margin:0 0 8px;color:#7c0a21;font-weight:bold}
+    .moye-export .latex-abstract{margin:24px 0;padding:12px 20px;border-left:2px solid #7c0a21;background:#7c0a2109}
+    .moye-export .latex-figure{margin:26px 0;text-align:center}.moye-export .latex-figure figcaption{margin-top:8px;font-size:14px;color:#6d6567}
+    .moye-export .latex-table-wrap{margin:20px 0;overflow:auto}.moye-export .latex-theorem{margin:22px 0;padding:12px 18px;border-left:2px solid #7c0a21;background:#7c0a2109}.moye-export .latex-theorem-head{margin:0 0 8px;color:#7c0a21}.moye-export .latex-qed{float:right}
+    .moye-export .latex-footnotes,.moye-export .latex-bibliography{margin-top:32px;padding-top:16px;border-top:1px solid #7c0a2164;font-size:14px}.moye-export .latex-footnotes li,.moye-export .latex-bibliography li{margin:6px 0}
+    .moye-export .latex-center{text-align:center}.moye-export .latex-flushleft{text-align:left}.moye-export .latex-flushright{text-align:right}
+    .moye-export .latex-environment{margin:18px 0;padding:6px 0 6px 16px;border-left:1px dashed #7c0a2164}.moye-export .latex-env-label{margin:0 0 6px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#6d6567}
+    .moye-export .latex-cite,.moye-export .latex-ref{color:#7c0a21}.moye-export .latex-smallcaps{font-variant:small-caps}.moye-export .latex-fbox{padding:0 .3em;border:1px solid #7c0a2164}.moye-export .latex-note{color:#6d6567;font-size:14px}.moye-export .latex-fallback{white-space:pre-wrap;overflow-wrap:anywhere}
     .moye-export table{border-collapse:collapse;display:table;max-width:100%;font-size:14px;table-layout:fixed;width:100%}
     .moye-export th,.moye-export td{padding:8px 14px;border:1px solid #7c0a2164;text-align:left;overflow-wrap:anywhere}
     .moye-export th{color:#7c0a21;font-weight:400}.moye-export del{color:#7c0a21;text-decoration-thickness:2px}
@@ -26,7 +37,7 @@
     .moye-export .toc-link{display:block;font-size:14px;line-height:30px;padding-left:calc(10px + var(--depth,0)*14px);text-decoration:none}
     .moye-export .toc-page{float:right;font-size:10px;margin-left:8px}
     .moye-export .document-page{display:flow-root}.moye-export .document-page+.document-page{margin-top:48px;padding-top:32px;border-top:1px solid #7c0a2164}
-    @media print{.moye-export{width:auto;padding:0}.moye-export svg{break-inside:avoid}.moye-export .document-page+.document-page{break-before:page;margin:0;padding:0;border:0}}
+    @media print{.moye-export{width:auto;padding:0}.moye-export svg,.moye-export .latex-figure,.moye-export .latex-theorem{break-inside:avoid}.moye-export .document-page+.document-page{break-before:page;margin:0;padding:0;border:0}}
   `;
   function dataURL(blob) {
     return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(blob); });

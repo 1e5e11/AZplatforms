@@ -2,7 +2,7 @@
 ((global) => {
   'use strict';
 
-  const CODE_ALIASES = { 'c++':'cpp', cxx:'cpp', cc:'cpp', py:'python', js:'javascript', html:'xml', htm:'xml', md:'markdown', ts:'typescript', sh:'bash', text:'plaintext', txt:'plaintext' };
+  const CODE_ALIASES = { 'c++':'cpp', cxx:'cpp', cc:'cpp', py:'python', js:'javascript', html:'xml', htm:'xml', md:'markdown', ts:'typescript', sh:'bash', text:'plaintext', txt:'plaintext', svg:'xml' };
   const DATA_IMAGE = /^data:image\/(?:png|jpeg|gif|webp|avif|bmp|x-icon|svg\+xml);base64,[a-z0-9+/]+={0,2}$/i;
   const SVG_BLOCK = /^ {0,3}<svg[\s>][\s\S]*?<\/svg\s*>(?:\n|$)/i;
   const SVG_INLINE = /^<svg[\s>][\s\S]*?<\/svg\s*>/i;
@@ -13,6 +13,23 @@
 
   function escapeHTML(text) {
     return text.replace(/[&<>"']/g, character => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[character]);
+  }
+
+  function isSVGSource(language, source) {
+    if (language === 'svg') return true;
+    return /^\s*(?:<\?xml[\s\S]*?\?>\s*)?<svg[\s>]/i.test(source) && /<\/svg\s*>\s*$/i.test(source);
+  }
+
+  // 代码块里的 SVG 通过 <img> 显示，脚本不会执行，图形也不会影响页面样式。
+  function svgDataURL(source) {
+    if (source.length > 1000000) return null;
+    const doc = new DOMParser().parseFromString(source, 'image/svg+xml');
+    if (doc.querySelector('parsererror') || doc.documentElement.localName !== 'svg') return null;
+    if (!doc.documentElement.getAttribute('xmlns')) doc.documentElement.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    const bytes = new TextEncoder().encode(new XMLSerializer().serializeToString(doc.documentElement));
+    let binary = '';
+    for (let index = 0; index < bytes.length; index += 0x8000) binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
+    return `data:image/svg+xml;base64,${btoa(binary)}`;
   }
 
   function mathToken(type, raw, text, displayMode) {
@@ -243,6 +260,24 @@
     return changed ? result + line.slice(cursor) : line;
   }
 
+  function looksLikeMarkdownBlock(line) {
+    const trimmed = line.trim();
+    if (!trimmed) return false;
+    if (/^(?:#{1,6}\s|[-*+]\s|\d{1,9}[.)]\s|>\s|```|~~~|\|)/.test(trimmed)) return true;
+    if (/^(?:\[[^\]]+\]:|!\[|<!--)/.test(trimmed)) return true;
+    return /^(?:---+|\*\*\*+|___+)$/.test(trimmed);
+  }
+
+  function looksLikeMathLine(line) {
+    const text = line.trim();
+    if (!text) return false;
+    if (/^[{}\s&\\]+$/.test(text)) return true;
+    if (/[㐀-鿿]/.test(text) && !/^\s*\\[A-Za-z]+\{/.test(text)) return false;
+    if (/\\/.test(text)) return true;
+    if (/[^\x20-\x7e]/.test(text)) return false;
+    return /[=^_+*/|<>]/.test(text);
+  }
+
   function processBareBlock(lines) {
     const output = lines.slice();
     const protectedLines = new Array(lines.length).fill(false);
@@ -261,15 +296,34 @@
       else if (/^\s*<[A-Za-z!/]/.test(lines[index]) && !/^\s*<!--\s*md:/.test(lines[index])) protectedLines[index] = true;
     }
     const replaced = new Set();
+    // 整段多行公式（例如 \boxed{…} 或分行的等式）按一个独立公式处理。
+    const blocked = index => protectedLines[index] || replaced.has(index) || output[index] === null || !lines[index].trim();
+    for (let start = 0; start < lines.length;) {
+      if (blocked(start)) { start++; continue; }
+      let end = start;
+      while (end + 1 < lines.length && !blocked(end + 1)) end++;
+      if (end > start) {
+        const chunk = lines.slice(start, end + 1), joined = chunk.join('\n');
+        if (!chunk.some(looksLikeMarkdownBlock) && chunk.every(looksLikeMathLine) && /[\\^]|_\{/.test(joined)) {
+          const tex = acceptsBareTeX(joined, true);
+          if (tex) {
+            output[start] = `\n<div data-md-math="display">${escapeHTML(tex)}</div>\n`;
+            replaced.add(start);
+            for (let remove = start + 1; remove <= end; remove++) output[remove] = null;
+          }
+        }
+      }
+      start = end + 1;
+    }
     for (let index = 0; index < lines.length; index++) {
-      if (protectedLines[index]) continue;
+      if (protectedLines[index] || replaced.has(index) || output[index] === null) continue;
       const begin = /^\\begin\{([A-Za-z*]+)\}/.exec(lines[index]);
       if (!begin) continue;
       const endToken = `\\end{${begin[1]}}`;
       if (lines[index].includes(endToken)) continue;
       let end = -1;
       for (let next = index + 1; next < lines.length; next++) {
-        if (protectedLines[next]) break;
+        if (protectedLines[next] || replaced.has(next) || output[next] === null) break;
         if (lines[next].includes(endToken)) { end = next; break; }
       }
       if (end < 0) continue;
@@ -562,47 +616,23 @@
     parse(markdown, options = {}) {
       const baseURL = options.baseURL || this.baseURL;
       const images = options.images || this.images;
-      const tokens = marked.lexer(expandBareMath(markdown));
-      prepareMathTokens(tokens);
-      const groups = [[]];
-      for (const token of tokens) {
-        const match = token.type === 'html' && /^<!-- md:(page|toc|nav) -->\s*$/.exec(token.raw);
-        if (match?.[1] === 'page') groups.push([]);
-        else if (match) groups.at(-1).push({ directive:match[1] });
-        else groups.at(-1).push(token);
-      }
-
       const headings = [];
       const slugs = new Set();
-      const pages = groups.map((group, pageIndex) => {
-        const article = document.createElement('section');
-        article.className = 'document-page';
-        let batch = [];
-        const flush = () => {
-          if (!batch.length) return;
-          batch.links = tokens.links;
-          const template = document.createElement('template');
-          template.innerHTML = sanitize(marked.parser(batch));
-          prepareContent(template.content);
-          for (const element of template.content.querySelectorAll('[class]')) {
-            const language = element.tagName === 'CODE' && element.parentElement?.tagName === 'PRE' && /^language-([\w+-]+)$/.exec(element.className);
-            element.removeAttribute('class');
-            if (language) element.dataset.language = language[1].toLowerCase();
-          }
-          renderMath(template.content);
-          article.append(template.content);
-          batch = [];
-        };
-        for (const token of group) {
-          if (token.directive) {
-            flush();
-            const slot = document.createElement('div');
-            slot.dataset.directive = token.directive;
-            article.append(slot);
-          } else batch.push(token);
+      const appendHTML = (article, html) => {
+        const template = document.createElement('template');
+        template.innerHTML = sanitize(html);
+        prepareContent(template.content);
+        for (const element of template.content.querySelectorAll('[class]')) {
+          const language = element.tagName === 'CODE' && element.parentElement?.tagName === 'PRE' && /^language-([\w+-]+)$/.exec(element.className);
+          const keep = element.getAttribute('class').split(/\s+/).filter(name => /^latex-/.test(name));
+          element.removeAttribute('class');
+          if (language) element.dataset.language = language[1].toLowerCase();
+          if (keep.length) element.setAttribute('class', keep.join(' '));
         }
-        flush();
-
+        renderMath(template.content);
+        article.append(template.content);
+      };
+      const finishPage = (article, pageIndex) => {
         for (const node of article.querySelectorAll('h1,h2,h3,h4,h5,h6')) {
           const stem = node.textContent.trim().toLowerCase().replace(/[^\p{L}\p{N}\s_-]/gu, '').replace(/\s+/g, '-') || 'section';
           let slug = stem, suffix = 2;
@@ -611,7 +641,6 @@
           node.id = `md-heading-${slug}`;
           headings.push({ id:slug, text:node.textContent, level:Number(node.tagName[1]), page:pageIndex + 1 });
         }
-
         for (const node of article.querySelectorAll('[href],[src]')) {
           const attr = node.hasAttribute('href') ? 'href' : 'src';
           const value = node.getAttribute(attr);
@@ -635,7 +664,6 @@
           }
           if (node.tagName === 'IMG') { node.loading = 'lazy'; node.referrerPolicy = 'no-referrer'; }
         }
-
         for (const code of article.querySelectorAll('pre > code')) {
           const requested = code.dataset.language || 'text';
           const language = CODE_ALIASES[requested] || requested;
@@ -652,7 +680,70 @@
           const feedback = document.createElement('span'); feedback.className = 'copy-feedback'; feedback.setAttribute('role', 'status');
           const pre = code.parentElement;
           pre.replaceWith(wrapper); bar.append(label, feedback, button); wrapper.append(bar, pre);
+          if (isSVGSource(requested, raw)) {
+            const url = svgDataURL(raw);
+            if (url) {
+              wrapper.classList.add('svg-block');
+              label.textContent = 'SVG';
+              const preview = document.createElement('div'); preview.className = 'svg-preview';
+              const image = document.createElement('img'); image.className = 'svg-image'; image.alt = 'SVG 图形'; image.src = url;
+              preview.append(image);
+              const toggle = document.createElement('button'); toggle.type = 'button'; toggle.className = 'toggle-svg-source'; toggle.textContent = '查看代码'; toggle.setAttribute('aria-label', '查看 SVG 源代码'); toggle.setAttribute('aria-pressed', 'false');
+              bar.insertBefore(toggle, button);
+              wrapper.insertBefore(preview, pre);
+              pre.hidden = true;
+            } else label.textContent = `${requested} · SVG 无法预览`;
+          }
         }
+      };
+      if ((options.format || (global.MoyeLatex?.isLatex(markdown) ? 'latex' : 'markdown')) === 'latex') {
+        if (!global.MoyeLatex) throw new Error('LaTeX 显示组件未加载，请检查 md-latex.js。');
+        const pages = global.MoyeLatex.render(markdown).pages.map((html, pageIndex) => {
+          const article = document.createElement('section');
+          article.className = 'document-page';
+          appendHTML(article, html);
+          for (const marker of article.querySelectorAll('.latex-toc-marker')) {
+            const slot = document.createElement('div'); slot.dataset.directive = 'toc'; marker.replaceWith(slot);
+          }
+          const nav = document.createElement('div'); nav.dataset.directive = 'nav'; article.append(nav);
+          finishPage(article, pageIndex);
+          return article;
+        });
+        this.baseURL = baseURL;
+        this.images = images;
+        this.pages = pages;
+        this.headings = headings;
+        return { pages, headings };
+      }
+      const tokens = marked.lexer(expandBareMath(markdown));
+      prepareMathTokens(tokens);
+      const groups = [[]];
+      for (const token of tokens) {
+        const match = token.type === 'html' && /^<!-- md:(page|toc|nav) -->\s*$/.exec(token.raw);
+        if (match?.[1] === 'page') groups.push([]);
+        else if (match) groups.at(-1).push({ directive:match[1] });
+        else groups.at(-1).push(token);
+      }
+      const pages = groups.map((group, pageIndex) => {
+        const article = document.createElement('section');
+        article.className = 'document-page';
+        let batch = [];
+        const flush = () => {
+          if (!batch.length) return;
+          batch.links = tokens.links;
+          appendHTML(article, marked.parser(batch));
+          batch = [];
+        };
+        for (const token of group) {
+          if (token.directive) {
+            flush();
+            const slot = document.createElement('div');
+            slot.dataset.directive = token.directive;
+            article.append(slot);
+          } else batch.push(token);
+        }
+        flush();
+        finishPage(article, pageIndex);
         return article;
       });
 
