@@ -1287,6 +1287,13 @@ body.article-view .reader-shell {
   color: var(--az-placeholder);
 }
 
+.review-note {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--az-accent);
+}
+
 .review-excerpt {
   margin: 6px 0 0;
   font-size: 13px;

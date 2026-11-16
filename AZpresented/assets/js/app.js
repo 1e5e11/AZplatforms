@@ -964,6 +964,7 @@
         '<div class="banner">' + (state.isAdmin
           ? L('这篇文章还在等待审核。', 'This post is still waiting for review.')
           : L('文章正在等待管理员审核，通过后才会公开。', 'This post is waiting for admin review. It goes public once approved.')) +
+        (state.draftNote ? L('：', ': ') + esc(state.draftNote) : '') +
         '</div>'
       );
     } else if (state.draftStatus === 'rejected') {
@@ -980,6 +981,7 @@
         '<div class="banner">' + (state.isAdmin
           ? L('这篇文章有一份待审核的修改，直接保存会放弃这份修改。', 'This post has an edit waiting for review; saving here discards it.')
           : L('你的修改正在等待管理员审核，公开页面仍显示旧版本。', 'Your edit is waiting for admin review; the public page still shows the old version.')) +
+        (pending.note ? L('：', ': ') + esc(pending.note) : '') +
         (state.isAdmin
           ? '<button class="op" data-action="admin-review">' + L('去审核', 'Review it') + '</button>'
           : '') +
@@ -1269,7 +1271,9 @@
   function reviewBadges(post) {
     var badges = '';
     if (post.status === 'pending') {
-      badges += '<span class="badge pending">' + L('待审核', 'Pending') + '</span>';
+      badges += '<span class="badge pending"' +
+        (post.review_note ? ' title="' + esc(post.review_note) + '"' : '') + '>' +
+        L('待审核', 'Pending') + '</span>';
     } else if (post.status === 'rejected') {
       badges += '<span class="badge rejected"' +
         (post.review_note ? ' title="' + esc(post.review_note) + '"' : '') + '>' +
@@ -1393,6 +1397,9 @@
           ? '<div class="review-current">' + L('当前标题', 'Current title') + '：' +
             esc(item.current.title) + '</div>'
           : '';
+        var noteLine = item.review_note
+          ? '<div class="review-note">' + esc(item.review_note) + '</div>'
+          : '';
         return (
           '<div class="review-row">' +
           '<div class="review-head">' +
@@ -1403,6 +1410,7 @@
           '<div class="review-meta">' + esc(item.author) + ' · ' + esc(item.category) + ' · ' +
           L('提交于 ', 'submitted ') + esc(fmtDate(item.submitted_at)) + '</div>' +
           currentNote +
+          noteLine +
           '<p class="review-excerpt">' + esc(item.excerpt) + '</p>' +
           '<div class="review-ops">' +
           '<button class="op" data-action="preview-review" data-key="' + esc(key) + '">' +
@@ -1957,36 +1965,54 @@
         ? await request('/posts/' + encodeURIComponent(editingSlug), { method: 'PUT', body: payload, auth: true })
         : await request('/posts', { method: 'POST', body: payload, auth: true });
       state.saving = false;
+      var ai = data.ai || null;
+      var aiReason = ai && ai.reason ? ai.reason : '';
       if (data.pending) {
+        var editRejected = Boolean(ai && ai.decision === 'reject');
         state.draftPendingEdit = {
-          status: 'pending',
-          note: '',
+          status: editRejected ? 'rejected' : 'pending',
+          note: editRejected && aiReason ? 'AI 审核：' + aiReason : aiReason,
           submitted_at: new Date().toISOString()
         };
-        setStatus(L(
-          '修改已提交审核，管理员通过后生效',
-          'Edit submitted for review; it takes effect after admin approval'
-        ));
+        setStatus(editRejected
+          ? L('AI 审核未通过：' + aiReason, 'AI review rejected: ' + aiReason)
+          : ai && ai.decision === 'manual' && aiReason
+            ? L(aiReason + '，等待管理员审核', aiReason + ' — waiting for admin review')
+            : L('修改已提交审核，管理员通过后生效', 'Edit submitted for review; it takes effect after admin approval'));
         await renderRoute();
         return;
       }
       var post = data.post;
       state.draftStatus = post.status || 'published';
       state.draftNote = post.review_note || '';
+      var aiApproved = Boolean(ai && ai.decision === 'approve');
+      var aiRejected = Boolean(ai && ai.decision === 'reject');
       if (!editingSlug) {
         state.editingSlug = post.slug;
         state.draft = postToDraft(post);
         state.draftPendingEdit = null;
-        setStatus(post.status === 'pending'
-          ? L('已提交审核，管理员通过后公开', 'Submitted for review; it goes public after admin approval')
-          : L('文章已发布', 'Post published'));
+        setStatus(aiApproved
+          ? L('AI 审核通过，文章已公开', 'AI review approved; the post is now public')
+          : aiRejected
+            ? L('AI 审核未通过：' + aiReason, 'AI review rejected: ' + aiReason)
+            : post.status === 'pending'
+              ? (ai && ai.decision === 'manual' && aiReason
+                ? L(aiReason + '，等待管理员审核', aiReason + ' — waiting for admin review')
+                : L('已提交审核，管理员通过后公开', 'Submitted for review; it goes public after admin approval'))
+              : L('文章已发布', 'Post published'));
         location.hash = '#/admin/edit/' + encodeURIComponent(post.slug);
       } else {
         state.draft = postToDraft(post);
         state.draftPendingEdit = null;
-        setStatus(state.role === 'author'
-          ? L('已保存并重新提交审核', 'Saved and resubmitted for review')
-          : L('修改已保存，新版本已记录', 'Changes saved as a new version'));
+        setStatus(aiApproved
+          ? L('修改已通过 AI 审核并生效', 'Edit approved by AI and published')
+          : aiRejected
+            ? L('AI 审核未通过：' + aiReason + '，公开页面保持旧版', 'AI review rejected: ' + aiReason + '; the public page keeps the old version')
+            : state.role === 'author'
+              ? (ai && ai.decision === 'manual' && aiReason
+                ? L(aiReason + '，等待管理员审核', aiReason + ' — waiting for admin review')
+                : L('已保存并重新提交审核', 'Saved and resubmitted for review'))
+              : L('修改已保存，新版本已记录', 'Changes saved as a new version'));
         await renderRoute();
       }
     } catch (e) {
@@ -2068,19 +2094,35 @@
         '/posts/' + encodeURIComponent(state.editingSlug) + '/versions/' + version + '/restore',
         { method: 'POST', auth: true }
       );
+      var ai = data.ai || null;
+      var aiReason = ai && ai.reason ? ai.reason : '';
       if (data.pending) {
-        state.draftPendingEdit = { status: 'pending', note: '', submitted_at: new Date().toISOString() };
-        setStatus(L('恢复内容已提交审核，通过后生效', 'Restored content submitted for review'));
+        var editRejected = Boolean(ai && ai.decision === 'reject');
+        state.draftPendingEdit = {
+          status: editRejected ? 'rejected' : 'pending',
+          note: editRejected && aiReason ? 'AI 审核：' + aiReason : aiReason,
+          submitted_at: new Date().toISOString()
+        };
+        setStatus(editRejected
+          ? L('AI 审核未通过：' + aiReason, 'AI review rejected: ' + aiReason)
+          : ai && ai.decision === 'manual' && aiReason
+            ? L(aiReason + '，等待管理员审核', aiReason + ' — waiting for admin review')
+            : L('恢复内容已提交审核，通过后生效', 'Restored content submitted for review'));
         await renderRoute();
         return;
       }
       state.draft = postToDraft(data.post);
       state.draftStatus = data.post.status || 'published';
+      state.draftNote = data.post.review_note || '';
       state.editingSlug = data.post.slug;
-      setStatus(L(
-        '已恢复到第 ' + version + ' 版，并生成新版本',
-        'Restored version #' + version + ' as a new version'
-      ));
+      setStatus(ai && ai.decision === 'approve'
+        ? L('恢复到第 ' + version + ' 版并通过 AI 审核，已生效', 'Restored version #' + version + ' and approved by AI')
+        : ai && ai.decision === 'reject'
+          ? L('AI 审核未通过：' + aiReason, 'AI review rejected: ' + aiReason)
+          : L(
+            '已恢复到第 ' + version + ' 版，并生成新版本',
+            'Restored version #' + version + ' as a new version'
+          ));
       await renderRoute();
     } catch (e) {
       if (!authError(e)) setStatus(e.message, 'error');
