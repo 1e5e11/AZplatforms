@@ -51,6 +51,9 @@ function methodLabel(method) {
 function render() {
   const t = stats.totals;
   const users = stats.users || [];
+  const storageUsed = Number(t.storageUsed) || 0;
+  const storageLimit = Number(t.storageLimit) || 5 * 1024 * 1024 * 1024;
+  const storagePercent = storageLimit ? Math.min(100, Math.round((storageUsed / storageLimit) * 100)) : 0;
   const daily = buildDaily(stats.daily || [], stats.days || 14);
   const max = Math.max(1, ...daily.map((d) => d.count));
   const chart = daily.map((d) => `
@@ -90,6 +93,8 @@ function render() {
     <div class="view-head">
       <span class="view-title">管理后台</span>
       <button type="button" class="az-btn" data-action="new" style="margin-left:auto">新建员工</button>
+      <button type="button" class="az-btn small" data-action="conversations">全部会话</button>
+      <button type="button" class="az-btn small" data-action="logs">系统日志</button>
       <button type="button" class="az-btn small" data-action="refresh">刷新</button>
     </div>
     <div class="admin-body">
@@ -100,6 +105,7 @@ function render() {
         <div class="stat-tile"><div class="stat-label">今日消息</div><div class="stat-value">${t.messagesToday}</div></div>
         <div class="stat-tile"><div class="stat-label">公共文件</div><div class="stat-value">${t.publicFiles}</div></div>
         <div class="stat-tile"><div class="stat-label">群聊 / 私信</div><div class="stat-value">${t.groups} / ${t.dms}</div></div>
+        <div class="stat-tile" title="${util.escapeHtml(util.fmtSize(storageUsed))} / ${util.escapeHtml(util.fmtSize(storageLimit))}"><div class="stat-label">存储用量</div><div class="stat-value">${storagePercent}%</div></div>
       </div>
       <div class="admin-section"><span>近 ${stats.days} 天登录次数</span><span class="hint">悬停柱状图查看日期</span></div>
       <div class="chart-panel">${chart}</div>
@@ -122,6 +128,7 @@ function render() {
       <div class="side-line"><span>今日消息</span><span>${t.messagesToday}</span></div>
       <div class="side-line"><span>消息总数</span><span>${t.messages}</span></div>
       <div class="side-line"><span>已停用账号</span><span>${t.employeesAll - t.employees}</span></div>
+      <div class="side-line"><span>存储用量</span><span>${util.fmtSize(storageUsed)} / ${util.fmtSize(storageLimit)}</span></div>
       <div class="side-section">
         <div class="side-title">说明</div>
         <div class="form-note">员工可用用户名密码登录，也可使用个人 Token 免密登录。管理员可随时重置密码或重新生成 Token。</div>
@@ -149,6 +156,8 @@ function onViewClick(event) {
     const a = action.dataset.action;
     if (a === 'refresh') loadStats();
     if (a === 'new') openNewUserModal();
+    if (a === 'conversations') openConversationsModal();
+    if (a === 'logs') openLogsModal();
     return;
   }
   const edit = event.target.closest('[data-edit]');
@@ -362,4 +371,172 @@ function openEditUserModal(user) {
       ui.toast(err.message, { error: true });
     }
   });
+}
+
+/* ---------------- 会话审计 ---------------- */
+
+const ACTION_LABELS = {
+  login: '密码登录',
+  login_failed: '登录失败',
+  token_login: 'Token 登录',
+  logout: '退出登录',
+  nickname: '修改昵称',
+  password: '修改密码',
+  user_create: '创建员工',
+  user_update: '更新员工',
+  user_password: '重置密码',
+  user_token: '重置 Token',
+  user_avatar: '更新头像',
+  conversation_create: '创建会话',
+  conversation_rename: '修改群名',
+  member_add: '添加成员',
+  member_remove: '移除成员',
+  message_delete: '删除消息',
+  file_upload: '上传文件',
+  file_delete: '删除文件',
+  storage_limit: '存储超额',
+  server_error: '服务器错误',
+};
+
+function actionLabel(action) {
+  return ACTION_LABELS[action] || action;
+}
+
+function logCategory(action) {
+  if (action === 'login' || action === 'login_failed' || action === 'token_login' || action === 'logout') {
+    return 'login';
+  }
+  if (action.startsWith('user_') || action === 'nickname' || action === 'password') return 'user';
+  if (action.startsWith('conversation') || action.startsWith('member_')) return 'conversation';
+  if (action.startsWith('message')) return 'message';
+  if (action.startsWith('file') || action === 'storage_limit') return 'file';
+  return 'system';
+}
+
+async function openConversationsModal() {
+  let items = [];
+  const modal = ui.openModal({
+    title: '全部会话',
+    width: 500,
+    height: 600,
+    body: `
+      <div class="form-row"><label>搜索</label><input class="az-input" data-search placeholder="群名或成员昵称"></div>
+      <div data-list class="audit-list"><div class="empty-block">加载中…</div></div>
+    `,
+    footer: '<button type="button" class="az-btn" data-close>关闭</button>',
+  });
+  const listEl = modal.query('[data-list]');
+  const searchEl = modal.query('[data-search]');
+  modal.query('[data-close]').addEventListener('click', modal.close);
+
+  function render() {
+    const q = (searchEl.value || '').trim().toLowerCase();
+    const shown = items.filter((c) => {
+      if (!q) return true;
+      return `${c.name} ${c.members.map((m) => m.nickname).join(' ')}`.toLowerCase().includes(q);
+    });
+    if (!shown.length) {
+      listEl.innerHTML = '<div class="empty-block">没有匹配的会话</div>';
+      return;
+    }
+    listEl.innerHTML = shown.map((c) => {
+      const typeLabel = c.type === 'all' ? '全员群' : c.type === 'group' ? '群聊' : '私信';
+      const last = c.lastMessage
+        ? `${util.previewText(c.lastMessage)} · ${util.fmtTime(c.lastMessage.createdAt)}`
+        : '暂无消息';
+      const members = c.members.map((m) => m.nickname).join('、');
+      return `
+        <button type="button" class="audit-conv-row" data-audit="${c.id}">
+          ${util.avatarHtml({ nickname: c.name, avatarUrl: c.avatarUrl }, 'avatar avatar-sm')}
+          <span class="audit-conv-main">
+            <span class="audit-conv-name">${util.escapeHtml(c.name)}<span class="audit-conv-type">${typeLabel}</span></span>
+            <span class="audit-conv-sub">${c.memberCount} 人 · ${c.messageCount} 条消息 · ${util.escapeHtml(last)}</span>
+            <span class="audit-conv-sub">${util.escapeHtml(members)}</span>
+          </span>
+          <span class="row-end">查看</span>
+        </button>`;
+    }).join('');
+  }
+
+  listEl.addEventListener('click', (event) => {
+    const row = event.target.closest('[data-audit]');
+    if (!row) return;
+    modal.close();
+    app.openAuditConversation(Number(row.dataset.audit));
+  });
+  searchEl.addEventListener('input', render);
+  try {
+    const data = await request('/api/admin/conversations');
+    items = data.conversations || [];
+    render();
+  } catch (err) {
+    listEl.innerHTML = `<div class="empty-block">${util.escapeHtml(err.message)}</div>`;
+  }
+}
+
+/* ---------------- 系统日志 ---------------- */
+
+async function openLogsModal() {
+  let logs = [];
+  const modal = ui.openModal({
+    title: '系统日志',
+    width: 560,
+    height: 640,
+    body: `
+      <div class="form-row">
+        <label>筛选</label>
+        <select class="az-input" data-filter style="width:150px">
+          <option value="all">全部日志</option>
+          <option value="login">登录</option>
+          <option value="user">账号</option>
+          <option value="conversation">会话</option>
+          <option value="message">消息</option>
+          <option value="file">文件</option>
+          <option value="system">系统</option>
+        </select>
+        <button type="button" class="az-btn small" data-refresh>刷新</button>
+        <span class="form-note" data-count></span>
+      </div>
+      <div data-list class="log-list"><div class="empty-block">加载中…</div></div>
+    `,
+    footer: '<button type="button" class="az-btn" data-close>关闭</button>',
+  });
+  const listEl = modal.query('[data-list]');
+  const filterEl = modal.query('[data-filter]');
+  const countEl = modal.query('[data-count]');
+  modal.query('[data-close]').addEventListener('click', modal.close);
+
+  function render() {
+    const cat = filterEl.value;
+    const shown = logs.filter((log) => cat === 'all' || logCategory(log.action) === cat);
+    countEl.textContent = `${shown.length} 条`;
+    if (!shown.length) {
+      listEl.innerHTML = '<div class="empty-block">暂无日志</div>';
+      return;
+    }
+    listEl.innerHTML = shown.map((log) => `
+      <div class="audit-log-row">
+        <div class="al-top">
+          <span class="al-time">${util.escapeHtml(util.fmtTime(log.at))}</span>
+          <span class="al-actor">${util.escapeHtml(log.actor_name || '系统')}</span>
+          <span class="al-action">${util.escapeHtml(actionLabel(log.action))}</span>
+          <span class="al-ip">${util.escapeHtml(log.ip || '')}</span>
+        </div>
+        <div class="al-detail">${util.escapeHtml(log.detail || '')}</div>
+      </div>`).join('');
+  }
+
+  async function load() {
+    try {
+      const data = await request('/api/admin/logs?limit=300');
+      logs = data.logs || [];
+      render();
+    } catch (err) {
+      listEl.innerHTML = `<div class="empty-block">${util.escapeHtml(err.message)}</div>`;
+    }
+  }
+
+  filterEl.addEventListener('change', render);
+  modal.query('[data-refresh]').addEventListener('click', load);
+  load();
 }

@@ -528,7 +528,7 @@
 .admin-body { flex: 1 1 auto; overflow: auto; padding: 12px 20px 24px; min-height: 0; }
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 8px;
   margin-bottom: 12px;
 }
@@ -601,6 +601,61 @@
 .login-row-admin .lr-method { width: 60px; flex: 0 0 auto; font-size: 10px; color: var(--az-placeholder); }
 .login-row-admin .lr-ip { flex: 1 1 auto; font-size: 10px; color: var(--az-placeholder); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* ============ 会话审计与日志 ============ */
+.audit-list { max-height: 380px; overflow: auto; margin-top: 4px; }
+.audit-conv-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 56px;
+  padding: 4px 6px;
+  border: 0;
+  border-bottom: 1px solid rgba(124, 10, 33, .08);
+  background: transparent;
+  text-align: left;
+  cursor: default;
+}
+.audit-conv-row:hover { background-color: rgba(124, 10, 33, .045); }
+.audit-conv-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.audit-conv-name {
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--az-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.audit-conv-type {
+  margin-left: 6px;
+  font-size: 10px;
+  color: var(--az-accent);
+  border: 1px solid var(--az-accent-alpha);
+  border-radius: .15em;
+  padding: 0 3px;
+  line-height: 13px;
+}
+.audit-conv-sub {
+  font-size: 10px;
+  line-height: 15px;
+  color: var(--az-placeholder);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.log-list { max-height: 430px; overflow: auto; margin-top: 4px; }
+.audit-log-row {
+  padding: 4px 6px;
+  border-bottom: 1px solid rgba(124, 10, 33, .08);
+}
+.audit-log-row:hover { background-color: rgba(124, 10, 33, .04); }
+.al-top { display: flex; align-items: baseline; gap: 8px; line-height: 18px; }
+.al-time { width: 88px; flex: 0 0 auto; font-size: 10px; color: var(--az-placeholder); }
+.al-actor { font-size: 13px; color: var(--az-accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100px; }
+.al-action { font-size: 10px; color: var(--az-text); }
+.al-ip { margin-left: auto; font-size: 10px; color: var(--az-placeholder); }
+.al-detail { font-size: 12px; line-height: 18px; color: var(--az-text); word-break: break-all; padding-left: 2px; }
+
 .admin-side { padding: 10px 12px; }
 .admin-side .big-number { font-size: 25px; text-align: right; line-height: 30px; color: var(--az-accent); }
 .admin-side .side-line { display: flex; align-items: baseline; justify-content: space-between; font-size: 14px; line-height: 30px; }
@@ -657,7 +712,7 @@
 /* ============ 响应式 ============ */
 @media (max-width: 1280px) {
   .workspace { grid-template-columns: 280px minmax(0, 1fr) 280px; }
-  .stat-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .stat-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 @media (max-width: 1100px) {
   .workspace { grid-template-columns: 280px minmax(0, 1fr); }

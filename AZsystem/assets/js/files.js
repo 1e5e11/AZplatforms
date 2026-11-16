@@ -4,6 +4,7 @@ import * as ui from './ui.js';
 
 let app = null;
 let files = [];
+let storage = { used: 0, limit: 5 * 1024 * 1024 * 1024 };
 let loaded = false;
 let loading = false;
 let selectedFile = null;
@@ -42,7 +43,7 @@ function buildSkeleton() {
         <div class="file-pick" id="side-file-name">未选择文件</div>
         <input class="az-input" id="side-desc" placeholder="文件说明（可选）" maxlength="300">
         <button type="button" class="az-btn" id="side-upload" disabled>上传</button>
-        <div class="form-note">公共文件区对所有员工开放，单个文件最大 100MB。</div>
+        <div class="form-note">公共文件区对所有员工开放，单个文件最大 100MB，项目总存储上限 5GB。</div>
       </div>
       <div class="side-section" id="files-side-stats"></div>
     </div>
@@ -77,6 +78,7 @@ export async function loadFiles(query = '') {
   try {
     const data = await request(`/api/files${query ? `?q=${encodeURIComponent(query)}` : ''}`);
     files = data.files || [];
+    if (data.storage) storage = data.storage;
     loaded = true;
     renderList(query);
     renderSideStats();
@@ -130,13 +132,17 @@ function renderSideStats() {
   const el = document.getElementById('files-side-stats');
   if (!el) return;
   const totalBytes = files.reduce((sum, f) => sum + (Number(f.size) || 0), 0);
+  const used = Number(storage.used) || totalBytes;
+  const limit = Number(storage.limit) || 5 * 1024 * 1024 * 1024;
+  const percent = limit ? Math.min(100, Math.round((used / limit) * 100)) : 0;
   el.innerHTML = `
     <div class="side-title">文件统计</div>
     <div class="admin-side" style="padding:0">
       <div class="side-line"><span>公共文件</span><span>${files.length} 个</span></div>
-      <div class="side-line"><span>占用空间</span><span>${util.fmtSize(totalBytes)}</span></div>
+      <div class="side-line"><span>项目存储</span><span>${util.fmtSize(used)} / ${util.fmtSize(limit)}</span></div>
+      <div class="side-line"><span>使用比例</span><span>${percent}%</span></div>
     </div>
-    <div class="form-note">点击文件名可直接下载。</div>
+    <div class="form-note">单文件最大 100MB，项目总存储上限 5GB。点击文件名可直接下载。</div>
   `;
 }
 
@@ -188,7 +194,7 @@ function openUploadModal() {
         <button type="button" class="az-btn" data-pick>选择文件</button>
         <div class="file-pick" data-filename>未选择文件</div>
         <input class="az-input" data-desc placeholder="文件说明（可选）" maxlength="300">
-        <div class="form-note">上传后所有员工都可以查看和下载。</div>
+        <div class="form-note">上传后所有员工都可以查看和下载。单文件最大 100MB，项目总存储上限 5GB。</div>
       </div>
     `,
     footer: `<button type="button" class="az-btn" data-cancel>取消</button>

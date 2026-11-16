@@ -18,6 +18,11 @@ export function openProfile(app) {
         </div>
       </div>
 
+      <div class="form-section">昵称</div>
+      <div class="form-row"><label>昵称</label><input class="az-input" data-nickname value="${util.escapeHtml(me.nickname)}" maxlength="40"></div>
+      <div class="modal-actions"><button type="button" class="az-btn" data-save-nickname>保存昵称</button></div>
+      <div class="form-note">昵称会显示在聊天和成员列表中；用户名不可修改。</div>
+
       <div class="form-section">头像</div>
       <div class="user-detail">
         ${util.avatarHtml(me, 'avatar avatar-lg')}
@@ -36,7 +41,7 @@ export function openProfile(app) {
       <div class="form-row"><label>原密码</label><input class="az-input" data-old-password type="password" autocomplete="current-password"></div>
       <div class="form-row"><label>新密码</label><input class="az-input" data-new-password type="password" placeholder="至少 6 位" autocomplete="new-password" maxlength="100"></div>
       <div class="modal-actions"><button type="button" class="az-btn" data-change-password>修改密码</button></div>
-      <div class="form-note">修改后，其他设备上的登录会失效，当前设备保持登录。</div>
+      <div class="form-note">若当前账号尚未设置密码（Token 登录），原密码可留空。修改后其他设备的登录会失效。</div>
 
       <div class="form-section">我的登录统计</div>
       <div id="profile-login-stats"><div class="form-note">加载中…</div></div>
@@ -55,6 +60,24 @@ export function openProfile(app) {
   modal.query('[data-logout]').addEventListener('click', () => {
     modal.close();
     app.logout();
+  });
+
+  modal.query('[data-save-nickname]').addEventListener('click', async () => {
+    const nickname = (modal.query('[data-nickname]').value || '').trim();
+    if (!nickname) {
+      ui.toast('昵称不能为空', { error: true });
+      return;
+    }
+    try {
+      await request('/api/auth/me', { method: 'PATCH', body: { nickname } });
+      modal.close();
+      ui.toast('昵称已保存');
+      await app.reloadMe();
+      await app.refreshUsers();
+      await app.refreshConversations();
+    } catch (err) {
+      ui.toast(err.message, { error: true });
+    }
   });
 
   modal.query('[data-avatar]').addEventListener('click', async () => {

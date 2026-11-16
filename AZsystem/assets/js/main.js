@@ -17,6 +17,7 @@ const state = {
   hasMore: false,
   view: 'chat',
   hintBusy: false,
+  readOnly: false,
 };
 
 const els = {};
@@ -32,6 +33,7 @@ const app = {
   refreshConversations,
   reloadMe,
   updateTitle,
+  openAuditConversation,
   logout,
 };
 
@@ -297,6 +299,10 @@ function setView(view) {
   if (!state.hintBusy) setHintIdle();
 }
 
+async function openAuditConversation(id) {
+  await chat.openConversation(Number(id), { readOnly: true });
+}
+
 function setHint(text) {
   state.hintBusy = true;
   els.hint.textContent = text;
@@ -304,10 +310,9 @@ function setHint(text) {
 
 function setHintIdle() {
   state.hintBusy = false;
-  const base = api.getApiBase() || location.origin;
   const where =
     state.view === 'files' ? '公共文件区' : state.view === 'admin' ? '管理后台' : state.currentConversation ? state.currentConversation.name : '消息';
-  els.hint.textContent = `${where} · ${state.online.size} 人在线 · 后端 ${base}`;
+  els.hint.textContent = `${where} · ${state.online.size} 人在线`;
 }
 
 /* ---------------- WebSocket ---------------- */
@@ -355,10 +360,16 @@ function handleWsEvent(event) {
       setPresence(event.userId, event.online);
       if (!state.hintBusy) setHintIdle();
       break;
-    case 'message':
-      chat.onIncoming(event.message);
-      notifyDesktop(event.message);
+    case 'message': {
+      const message = event.message;
+      const known =
+        state.conversations.some((c) => c.id === message.conversationId) ||
+        state.currentId === message.conversationId;
+      if (!known) break;
+      chat.onIncoming(message);
+      notifyDesktop(message);
       break;
+    }
     case 'message:update':
       chat.onMessageUpdate(event.message);
       break;

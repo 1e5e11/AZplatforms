@@ -169,7 +169,7 @@ export function renderConversationList() {
 
 /* ---------------- 打开会话 ---------------- */
 
-export async function openConversation(id) {
+export async function openConversation(id, options = {}) {
   const seq = ++openSeq;
   let conv = findConv(id);
   if (!conv) {
@@ -184,13 +184,15 @@ export async function openConversation(id) {
   if (seq !== openSeq) return;
   state().currentId = conv.id;
   state().currentConversation = conv;
+  state().readOnly = !!options.readOnly;
+  applyReadOnly();
   app.setView('chat');
   renderConversationList();
   renderHeader();
   renderMembersPanel();
   els.messages.innerHTML = '<div class="empty-hint">加载中…</div>';
   els.typing.textContent = '';
-  els.input.focus();
+  if (!state().readOnly) els.input.focus();
 
   try {
     const data = await request(`/api/conversations/${conv.id}/messages?limit=40`);
@@ -198,7 +200,7 @@ export async function openConversation(id) {
     state().messages = data.messages || [];
     state().hasMore = !!data.hasMore;
     renderMessages({ scrollToBottom: true });
-    markRead();
+    if (!state().readOnly) markRead();
   } catch (err) {
     if (seq !== openSeq) return;
     els.messages.innerHTML = '<div class="empty-hint">消息加载失败</div>';
@@ -206,11 +208,18 @@ export async function openConversation(id) {
   }
 }
 
+function applyReadOnly() {
+  if (!els.composer) return;
+  els.composer.classList.toggle('hidden', !!state().readOnly);
+}
+
 export function closeConversation() {
   openSeq += 1;
   state().currentId = null;
   state().currentConversation = null;
   state().messages = [];
+  state().readOnly = false;
+  applyReadOnly();
   if (els.title) els.title.textContent = '会话';
   if (els.sub) els.sub.textContent = '';
   if (els.actions) els.actions.innerHTML = '';
@@ -220,7 +229,7 @@ export function closeConversation() {
 
 function markRead() {
   const conv = currentConv();
-  if (!conv) return;
+  if (!conv || state().readOnly) return;
   const last = state().messages[state().messages.length - 1];
   const messageId = last ? last.id : 0;
   request(`/api/conversations/${conv.id}/read`, { method: 'POST', body: { messageId } }).catch(() => {});
@@ -229,7 +238,7 @@ function markRead() {
 }
 
 export function markCurrentRead() {
-  if (state().currentId) markRead();
+  if (state().currentId && !state().readOnly) markRead();
 }
 
 /* ---------------- 头部与成员 ---------------- */
@@ -249,10 +258,13 @@ function renderHeader() {
     const other = members.find((m) => m.id !== state().me.id) || members[0];
     sub = other ? `${other.position || '同事'} · ${isOnline(other.id) ? '在线' : '离线'}` : '私信';
   }
+  if (state().readOnly) sub = `管理员只读查看 · ${sub}`;
   els.sub.textContent = sub;
 
   const buttons = ['<button type="button" class="az-btn small" data-action="members">成员</button>'];
-  if (conv.type === 'group') {
+  if (state().readOnly) {
+    buttons.push('<button type="button" class="az-btn small" data-action="back-admin">返回管理</button>');
+  } else if (conv.type === 'group') {
     if (canManageGroup(conv)) {
       buttons.push('<button type="button" class="az-btn small" data-action="invite">邀请</button>');
       buttons.push('<button type="button" class="az-btn small" data-action="rename">群名</button>');
@@ -285,7 +297,7 @@ export function renderMembersPanel() {
     </div>`).join('');
 
   let actions = '';
-  if (conv.type === 'group') {
+  if (!state().readOnly && conv.type === 'group') {
     if (canManageGroup(conv)) {
       actions += '<button type="button" class="az-btn small" data-action="invite">邀请成员</button>';
       actions += '<button type="button" class="az-btn small" data-action="rename">修改群名</button>';
@@ -293,7 +305,9 @@ export function renderMembersPanel() {
     actions += '<button type="button" class="az-btn small" data-action="leave">退出群聊</button>';
   }
   let note = '';
-  if (conv.type === 'dm') {
+  if (state().readOnly) {
+    note = '管理员审计视图，只读。';
+  } else if (conv.type === 'dm') {
     note = '这是你们的私信会话，只有双方可以看到。';
   } else if (conv.type === 'all') {
     note = '全员群包含所有在职员工，新员工会自动加入。';
@@ -361,7 +375,7 @@ function messageContent(m) {
       return `<div class="msg-bubble"><div class="chain-card">
         <div class="chain-title">${util.escapeHtml(body.title || '接龙')}</div>
         <div class="chain-entries">${rows}</div>
-        <div class="chain-foot"><span>${entries.length} 人已接龙</span><button type="button" class="az-btn small" data-chain-join="${m.id}">参加接龙</button></div>
+        <div class="chain-foot"><span>${entries.length} 人已接龙</span>${state().readOnly ? '' : `<button type="button" class="az-btn small" data-chain-join="${m.id}">参加接龙</button>`}</div>
       </div></div>`;
     }
     case 'system':
@@ -588,6 +602,7 @@ function sendTyping() {
 }
 
 async function postMessage(kind, body, fileId = null) {
+  if (state().readOnly) throw new Error('只读查看，不能发送消息');
   const conv = currentConv();
   if (!conv) return null;
   const data = await request('/api/messages', {
@@ -599,6 +614,10 @@ async function postMessage(kind, body, fileId = null) {
 }
 
 async function sendText() {
+  if (state().readOnly) {
+    ui.toast('只读查看，不能发送消息', { error: true });
+    return;
+  }
   const text = (els.input.value || '').trim();
   if (!text) return;
   if (!state().currentId) {
@@ -648,6 +667,10 @@ function resetKind() {
 async function handleKindButton(kind) {
   if (kind === 'text') {
     resetKind();
+    return;
+  }
+  if (state().readOnly) {
+    ui.toast('只读查看，不能发送消息', { error: true });
     return;
   }
   if (!state().currentId) {
@@ -867,6 +890,10 @@ function createChain() {
 }
 
 async function joinChain(messageId) {
+  if (state().readOnly) {
+    ui.toast('只读查看，不能参加接龙', { error: true });
+    return;
+  }
   const text = await ui.promptDialog({
     title: '参加接龙',
     label: '接龙内容',
@@ -892,6 +919,10 @@ function onChatActionClick(event) {
 }
 
 async function handleChatAction(action) {
+  if (action === 'back-admin') {
+    app.setView('admin');
+    return;
+  }
   const conv = currentConv();
   if (!conv) return;
   if (action === 'members') {
@@ -948,7 +979,7 @@ function openMembersModal() {
   const conv = currentConv();
   if (!conv) return;
   const members = conv.members || [];
-  const manage = conv.type === 'group' && canManageGroup(conv);
+  const manage = !state().readOnly && conv.type === 'group' && canManageGroup(conv);
   const rows = members.map((m) => {
     const live = userById(m.id) || m;
     const canRemove = manage && m.id !== state().me.id;
