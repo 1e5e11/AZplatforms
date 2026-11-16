@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#7c0a21">
+  <title>啊这工作系统</title>
+  <link rel="stylesheet" href="assets/base.css">
+  <link rel="stylesheet" href="assets/app.css">
+  <script src="config.js"></script>
+</head>
+<body class="az-ui">
+  <svg style="display:none" aria-hidden="true">
+    <defs>
+      <filter id="az-glass" x="0%" y="0%" width="100%" height="100%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.008 0.008"
+          numOctaves="2" seed="114514" result="noise" />
+        <feGaussianBlur in="noise" stdDeviation="2" result="blurred" />
+        <feDisplacementMap in="SourceGraphic" in2="blurred" scale="20"
+          xChannelSelector="R" yChannelSelector="G" />
+      </filter>
+    </defs>
+  </svg>
+
+  <section id="login-view" class="login-stage">
+    <div class="az-panel login-panel">
+      <h1 class="login-title">啊这工作系统</h1>
+      <p class="login-sub">公司群聊 · 协作 · 文件区</p>
+      <div class="login-tabs" role="tablist">
+        <button type="button" class="az-btn login-tab active" data-mode="password">密码登录</button>
+        <button type="button" class="az-btn login-tab" data-mode="token">Token 登录</button>
+      </div>
+      <form id="login-form" class="login-form" autocomplete="off">
+        <label class="login-row" id="login-user-row">
+          <span class="login-label">用户名</span>
+          <input class="az-input login-input" id="login-username" name="username" placeholder="username" autocomplete="username">
+        </label>
+        <label class="login-row" id="login-pass-row">
+          <span class="login-label">密码</span>
+          <input class="az-input login-input" id="login-password" name="password" type="password" placeholder="password" autocomplete="current-password">
+        </label>
+        <label class="login-row hidden" id="login-token-row">
+          <span class="login-label">Token</span>
+          <input class="az-input login-input" id="login-token" name="token" placeholder="粘贴登录 Token" autocomplete="off">
+        </label>
+        <div class="login-server">
+          <button type="button" class="link-btn" id="server-toggle">服务器地址</button>
+          <input class="az-input hidden" id="server-base" placeholder="https://api.example.com" autocomplete="off">
+        </div>
+        <button class="az-btn login-submit" id="login-submit" type="submit">登 录</button>
+        <div class="login-error" id="login-error"></div>
+      </form>
+      <p class="login-foot">首次使用请联系管理员获取账号 · Token 可长期免密登录</p>
+    </div>
+  </section>
+
+  <section id="app-view" class="app-shell hidden">
+    <header class="topbar">
+      <div class="brand">啊这工作系统</div>
+      <nav class="topnav" aria-label="主导航">
+        <button class="az-btn nav-btn active" data-view="chat" type="button">消息</button>
+        <button class="az-btn nav-btn" data-view="files" type="button">文件区</button>
+        <button class="az-btn nav-btn admin-only hidden" data-view="admin" type="button">管理</button>
+      </nav>
+      <div class="topbar-right">
+        <span class="dot" id="conn-dot" title="实时连接状态"></span>
+        <span class="conn-text" id="conn-text">连接中</span>
+        <button class="user-chip" id="user-chip" type="button" title="个人设置">
+          <span class="avatar avatar-sm" id="me-avatar"></span>
+          <span class="chip-name" id="me-name">…</span>
+          <span class="chip-position" id="me-position"></span>
+        </button>
+        <button class="az-btn" id="logout-btn" type="button">退出</button>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <aside class="az-panel panel-left">
+        <div class="panel-head">
+          <span class="panel-title-sm">会话</span>
+          <button class="az-btn small" id="new-chat-btn" type="button">发起聊天</button>
+        </div>
+        <input class="az-input conv-search" id="conv-search" placeholder="搜索会话" autocomplete="off">
+        <div class="conv-list az-scroll" id="conv-list"></div>
+        <div class="left-foot" id="left-foot"></div>
+      </aside>
+
+      <section class="az-panel panel-center">
+        <div id="chat-view" class="view chat-view">
+          <div class="chat-head">
+            <div class="chat-head-main">
+              <span class="chat-title" id="chat-title">全员群</span>
+              <span class="chat-sub" id="chat-sub"></span>
+            </div>
+            <div class="chat-head-actions" id="chat-actions"></div>
+          </div>
+          <div class="messages az-scroll" id="messages">
+            <div class="empty-hint">选择一个会话开始聊天</div>
+          </div>
+          <div class="typing-line" id="typing-line"></div>
+          <div class="composer" id="composer">
+            <div class="composer-tools" id="composer-tools">
+              <button class="az-btn small kind-btn active" data-kind="text" type="button">文本</button>
+              <button class="az-btn small kind-btn" data-kind="image" type="button">图片</button>
+              <button class="az-btn small kind-btn" data-kind="video" type="button">视频</button>
+              <button class="az-btn small kind-btn" data-kind="voice" type="button">语音</button>
+              <button class="az-btn small kind-btn" data-kind="location" type="button">位置</button>
+              <button class="az-btn small kind-btn" data-kind="file" type="button">文件</button>
+              <button class="az-btn small kind-btn" data-kind="chain" type="button">接龙</button>
+              <span class="tool-note" id="tool-note"></span>
+            </div>
+            <div class="composer-row">
+              <textarea id="composer-input" class="composer-input" rows="1" placeholder="输入消息…"></textarea>
+              <button class="composer-send" id="composer-send" type="button">发送</button>
+            </div>
+            <div class="recorder-bar hidden" id="recorder-bar">
+              <span class="rec-dot"></span>
+              <span>正在录音</span>
+              <span class="rec-time" id="rec-time">00:00</span>
+              <button class="az-btn small" id="rec-stop" type="button">停止并发送</button>
+              <button class="az-btn small" id="rec-cancel" type="button">取消</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="files-view" class="view hidden"></div>
+        <div id="admin-view" class="view hidden"></div>
+      </section>
+
+      <aside class="az-panel panel-right" id="right-panel">
+        <div id="members-panel"></div>
+        <div id="files-side" class="hidden"></div>
+        <div id="admin-side" class="hidden"></div>
+      </aside>
+    </main>
+
+    <footer class="hintbar az-bottom" id="hintbar">正在连接服务器…</footer>
+  </section>
+
+  <div id="overlay-root"></div>
+  <div id="lightbox-root"></div>
+  <div id="toast-root"></div>
+  <input type="file" id="hidden-file-input" class="hidden">
+
+  <script type="module" src="assets/js/main.js"></script>
+</body>
+</html>
