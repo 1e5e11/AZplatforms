@@ -26,11 +26,13 @@
     }
   })();
   var MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+  var PAGE_SIZE = 100;
   var PAGE = document.body.getAttribute('data-page') === 'admin' ? 'admin' : 'public';
   var view = document.getElementById('view');
   var statusbar = document.getElementById('statusbar');
   var searchInput = document.getElementById('search-input');
   var navAdmin = document.getElementById('nav-admin');
+  var navLogin = document.getElementById('nav-login');
   var langToggle = document.getElementById('lang-toggle');
   var themeToggle = document.getElementById('theme-toggle');
 
@@ -248,8 +250,11 @@
     lastRoute: null,
     posts: [],
     total: 0,
+    page: 1,
+    lastPage: 1,
     categories: [],
     authors: [],
+    readers: [],
     adminTab: 'write',
     draft: null,
     editingSlug: null,
@@ -357,11 +362,15 @@
       slug: '',
       created_at: toLocalInput(new Date()),
       pinned: false,
-      featured: false
+      featured: false,
+      visibility: 'public',
+      accessAuthors: [],
+      accessReaders: []
     };
   }
 
   function postToDraft(post) {
+    var access = post.access || {};
     return {
       title: post.title || '',
       author: post.author || '',
@@ -372,7 +381,10 @@
       slug: post.slug || '',
       created_at: toLocalInput(post.created_at),
       pinned: Boolean(post.pinned),
-      featured: Boolean(post.featured)
+      featured: Boolean(post.featured),
+      visibility: post.visibility === 'private' ? 'private' : 'public',
+      accessAuthors: Array.isArray(access.authors) ? access.authors.slice() : [],
+      accessReaders: Array.isArray(access.readers) ? access.readers.slice() : []
     };
   }
 
@@ -398,6 +410,24 @@
       return themedRendererUrl(RENDERER + '#src=' + encodeURIComponent(rawUrlForPost(post, true)));
     }
     return rendererUrlFromMarkdown(displayMarkdown(post));
+  }
+
+  async function authorizedRendererUrl(post) {
+    if (post.visibility !== 'private') return rendererUrlForPost(post);
+    if (!/^https:\/\//i.test(API) || !state.token) return rendererUrlForPost(post);
+    try {
+      var data = await request('/posts/' + encodeURIComponent(post.slug) + '/view-grant', {
+        method: 'POST',
+        auth: true
+      });
+      if (data && data.grant) {
+        var src = rawUrlForPost(post, true) + '&grant=' + encodeURIComponent(data.grant);
+        return themedRendererUrl(RENDERER + '#src=' + encodeURIComponent(src));
+      }
+    } catch (e) {
+      /* fall through to the plain renderer */
+    }
+    return rendererUrlForPost(post);
   }
 
   /* ---------- API ---------- */
@@ -443,9 +473,17 @@
   }
 
   function applyIdentity(data) {
-    state.role = data.role === 'author' ? 'author' : 'admin';
-    state.authorName = data.role === 'author' ? String(data.name || '') : '';
-    state.isAdmin = state.role === 'admin';
+    var role = data.role === 'author' || data.role === 'reader' ? data.role : 'admin';
+    state.role = role;
+    state.authorName = role === 'admin' ? '' : String(data.name || '');
+    state.isAdmin = role === 'admin';
+  }
+
+  function identityLabel() {
+    if (state.role === 'admin') return L('管理员', 'Admin');
+    if (state.role === 'author') return L('作者 ' + state.authorName, 'Author ' + state.authorName);
+    if (state.role === 'reader') return L('读者 ' + state.authorName, 'Reader ' + state.authorName);
+    return '';
   }
 
   function clearToken() {
@@ -526,7 +564,12 @@
             '作者模式 · ' + state.authorName + ' · 只能管理自己的文章',
             'Author mode · ' + state.authorName + ' · own posts only'
           )
-          : L('管理台 · 请输入登录令牌', 'Admin · token required');
+          : state.role === 'reader'
+            ? L(
+              '读者模式 · ' + state.authorName + ' · 请到博客阅读私密文章',
+              'Reader mode · ' + state.authorName + ' · read private posts on the blog'
+            )
+            : L('管理台 · 请输入登录令牌', 'Admin · token required');
     } else {
       statusbar.textContent = '';
     }
@@ -549,11 +592,16 @@
         }
       });
     if (parts[0] === 'post' && parts[1]) return { name: 'post', slug: parts[1] };
+    if (parts[0] === 'login') return { name: 'login' };
     if (parts[0] === 'admin') {
       if (parts[1] === 'edit' && parts[2]) return { name: 'admin', edit: parts[2] };
       return { name: 'admin' };
     }
-    return { name: 'home' };
+    if (parts[0] === 'page') {
+      var page = parseInt(parts[1], 10);
+      return { name: 'home', page: page > 1 ? page : 1 };
+    }
+    return { name: 'home', page: 1 };
   }
 
   function updateTopbar() {
@@ -568,6 +616,10 @@
       navAdmin.textContent = L('管理', 'Admin');
       navAdmin.setAttribute('href', hrefFor('admin.html'));
       if (brand) brand.setAttribute('href', '#/');
+      if (navLogin) {
+        navLogin.textContent = state.role ? L('退出', 'Sign out') : L('登录', 'Sign in');
+        navLogin.title = state.role ? identityLabel() : L('用令牌登录', 'Sign in with a token');
+      }
     }
   }
 
@@ -600,7 +652,12 @@
 
     if (PAGE === 'public') {
       if (route.name === 'post') await renderArticle(route.slug, my);
+      else if (route.name === 'login') renderLogin('', 'public');
       else await renderHome(my);
+      return;
+    }
+    if (route.name === 'login') {
+      location.replace(hrefFor('index.html', '#/login'));
       return;
     }
 
@@ -662,16 +719,85 @@
     setStatus(message, 'error');
   }
 
+  function goPage(page) {
+    var last = state.lastPage || 1;
+    var next = Math.min(Math.max(1, Math.floor(Number(page) || 1)), last);
+    var target = next > 1 ? '#/page/' + next : '#/';
+    var current = location.hash && location.hash !== '#' ? location.hash : '#/';
+    if (current === target) renderRoute();
+    else location.hash = target;
+    window.scrollTo(0, 0);
+  }
+
+  function backToFirstPage() {
+    if (location.hash && location.hash !== '#/' && location.hash !== '#') location.hash = '#/';
+    else renderRoute();
+  }
+
+  function pageItems(current, lastPage) {
+    var wanted = [1, lastPage];
+    for (var n = current - 2; n <= current + 2; n += 1) {
+      if (n >= 1 && n <= lastPage) wanted.push(n);
+    }
+    wanted.sort(function (a, b) { return a - b; });
+    var items = [];
+    for (var i = 0; i < wanted.length; i += 1) {
+      if (i > 0 && wanted[i] - wanted[i - 1] > 1) items.push(null);
+      if (items.indexOf(wanted[i]) < 0) items.push(wanted[i]);
+    }
+    return items;
+  }
+
+  function paginationHtml() {
+    var lastPage = state.lastPage || 1;
+    if (lastPage <= 1) return '';
+    var page = state.page || 1;
+    var numbers = pageItems(page, lastPage).map(function (n) {
+      if (n === null) return '<span class="page-gap" aria-hidden="true">…</span>';
+      var active = n === page;
+      return '<button class="tag page-number' + (active ? ' active' : '') + '" data-action="page-goto"' +
+        ' data-page="' + n + '"' + (active ? ' aria-current="page"' : '') + '>' + n + '</button>';
+    }).join('');
+    return '<nav class="pagination" aria-label="' + L('分页', 'Pagination') + '">' +
+      '<button class="tag page-step" data-action="page-goto" data-page="' + (page - 1) + '"' +
+      (page <= 1 ? ' disabled' : '') + '>' + L('上一页', 'Previous') + '</button>' +
+      '<span class="page-numbers">' + numbers + '</span>' +
+      '<button class="tag page-step" data-action="page-goto" data-page="' + (page + 1) + '"' +
+      (page >= lastPage ? ' disabled' : '') + '>' + L('下一页', 'Next') + '</button>' +
+      '<span class="page-jump">' + L('跳至', 'Jump to') +
+      '<input class="az-input page-jump-input" type="number" min="1" max="' + lastPage +
+      '" inputmode="numeric" data-page-jump placeholder="' + page + '" aria-label="' +
+      L('页码', 'Page number') + '">' +
+      '<button class="tag page-step" data-action="page-jump">' + L('跳转', 'Go') + '</button>' +
+      '<span class="page-count">' + L('共 ' + lastPage + ' 页', lastPage + ' pages') + '</span>' +
+      '</span></nav>';
+  }
+
   async function renderHome(my) {
     showLoading(L('正在读取文章…', 'Loading posts…'));
-    var params = new URLSearchParams({ limit: '100' });
+    var page = Math.max(1, Number((state.route && state.route.page) || 1));
+    var params = new URLSearchParams({
+      limit: String(PAGE_SIZE),
+      offset: String((page - 1) * PAGE_SIZE)
+    });
     if (state.query) params.set('q', state.query);
     if (state.category) params.set('category', state.category);
     try {
-      var results = await Promise.all([request('/posts?' + params.toString()), request('/categories')]);
+      var results = await Promise.all([
+        request('/posts?' + params.toString(), { auth: true }),
+        request('/categories')
+      ]);
       if (my !== ticket) return;
+      var total = Number(results[0].total || 0);
+      var lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
+      if (page > lastPage) {
+        location.hash = lastPage > 1 ? '#/page/' + lastPage : '#/';
+        return;
+      }
       state.posts = results[0].posts || [];
-      state.total = results[0].total || 0;
+      state.total = total;
+      state.page = page;
+      state.lastPage = lastPage;
       state.categories = results[1].categories || [];
       view.innerHTML = homeHtml();
       setDefaultStatus();
@@ -713,9 +839,14 @@
       (state.query || state.category
         ? L('筛选出 ' + state.total + ' 篇', state.total + ' found')
         : postCount(state.total)) +
+      (state.lastPage > 1
+        ? ' · ' + L('第 ' + state.page + ' / ' + state.lastPage + ' 页',
+          'Page ' + state.page + ' of ' + state.lastPage)
+        : '') +
       '</span></div>' +
       '<div class="category-strip">' + categoryChips + '</div>' +
       '<div class="post-list">' + rows + '</div>' +
+      paginationHtml() +
       '</section></div>'
     );
   }
@@ -724,6 +855,9 @@
     var badges = '';
     if (post.pinned) badges += '<span class="badge pin">' + L('置顶', 'Pinned') + '</span>';
     if (post.featured) badges += '<span class="badge featured">' + L('精选', 'Featured') + '</span>';
+    if (post.visibility === 'private') {
+      badges += '<span class="badge private">' + L('私密', 'Private') + '</span>';
+    }
     return badges;
   }
 
@@ -749,10 +883,13 @@
     showLoading(L('正在读取文章…', 'Loading post…'));
     try {
       var metaOnly = /^https:\/\//i.test(API);
-      var data = await request('/posts/' + encodeURIComponent(slug) + (metaOnly ? '?meta=1' : ''));
+      var data = await request('/posts/' + encodeURIComponent(slug) + (metaOnly ? '?meta=1' : ''), {
+        auth: true
+      });
       if (my !== ticket) return;
       var post = data.post;
-      var readerUrl = rendererUrlForPost(post);
+      var readerUrl = await authorizedRendererUrl(post);
+      if (my !== ticket) return;
       view.innerHTML = articleHtml(post, readerUrl);
       setDefaultStatus();
     } catch (e) {
@@ -762,9 +899,16 @@
           '<div class="workspace"><section class="panel glass main-panel">' +
           '<div class="empty-state"><p class="empty-title">' + L('文章不存在', 'Post not found') + '</p>' +
           '<p class="empty-text">' +
-          L('它可能已被删除，或者链接有误。', 'It may have been deleted, or the link is wrong.') +
-          '</p><a class="az-button" href="#/">' + L('返回文章列表', 'Back to posts') +
-          '</a></div></section></div>';
+          L(
+            '它可能已被删除、链接有误，或者这是一篇需要令牌登录的私密文章。',
+            'It may have been deleted, the link is wrong, or this is a private post that needs a token.'
+          ) +
+          '</p><div class="publish-actions">' +
+          (!state.role
+            ? '<a class="az-button" href="#/login">' + L('登录', 'Sign in') + '</a>'
+            : '') +
+          '<a class="az-button" href="#/">' + L('返回文章列表', 'Back to posts') +
+          '</a></div></div></section></div>';
       } else {
         renderError(e.message);
       }
@@ -807,18 +951,27 @@
 
   async function renderAdmin(route, my) {
     if (!state.role) {
-      renderLogin();
+      renderLogin('', 'admin');
+      return;
+    }
+    if (state.role === 'reader') {
+      renderReaderNotice();
       return;
     }
     state.previewMode = false;
     try {
       await loadTaxonomy(false);
       if (state.isAdmin) {
-        var reviews = await request('/admin/reviews', { auth: true });
+        var results = await Promise.all([
+          request('/admin/reviews', { auth: true }),
+          request('/admin/readers', { auth: true })
+        ]);
         if (my !== ticket) return;
-        state.reviewItems = reviews.reviews || [];
+        state.reviewItems = results[0].reviews || [];
+        state.readers = results[1].readers || [];
       } else {
         state.reviewItems = [];
+        state.readers = [];
       }
       if (route.edit) {
         var data = await request('/admin/posts/' + encodeURIComponent(route.edit), { auth: true });
@@ -877,21 +1030,28 @@
     }
   }
 
-  function renderLogin(message) {
+  function renderLogin(message, mode) {
+    var isPublic = mode === 'public';
     view.innerHTML =
       '<div class="login-screen"><section class="panel glass login-panel">' +
-      '<h1 class="login-title">' + L('管理', 'Admin') + '</h1>' +
+      '<h1 class="login-title">' + (isPublic ? L('登录', 'Sign in') : L('管理', 'Admin')) + '</h1>' +
       '<p class="login-sub">' +
-      L(
-        '输入管理员令牌或作者令牌，进入对应的写作与文章管理界面。',
-        'Enter an admin token or your author token to manage posts.'
-      ) +
+      (isPublic
+        ? L(
+          '用令牌登录。管理员、作者和读者都可以登录；读者登录后能看到指定给你的私密文章。',
+          'Sign in with a token. Admin, authors and readers can sign in; readers can open private posts shared with them.'
+        )
+        : L(
+          '输入管理员令牌或作者令牌，进入对应的写作与文章管理界面。',
+          'Enter an admin token or your author token to manage posts.'
+        )) +
       '</p><form id="login-form" autocomplete="off">' +
       '<label class="field"><span class="field-label">' + L('登录令牌', 'Access token') + '</span>' +
       '<input id="token-input" class="az-input login-input" type="password" placeholder="' +
       L('粘贴令牌…', 'Paste token…') + '" autocomplete="current-password"></label>' +
       (message ? '<p class="form-error">' + esc(message) + '</p>' : '') +
-      '<button class="az-confirm login-submit" type="submit">' + L('进入管理台', 'Enter dashboard') + '</button>' +
+      '<button class="az-confirm login-submit" type="submit">' +
+      (isPublic ? L('登录', 'Sign in') : L('进入管理台', 'Enter dashboard')) + '</button>' +
       '</form>' +
       '<p class="login-hint">' +
       L(
@@ -899,9 +1059,28 @@
         'The token lives in this tab’s sessionStorage and is cleared when the tab closes.'
       ) +
       '</p><a class="op login-back" href="#/">← ' + L('返回博客', 'Back to blog') + '</a>' +
+      (isPublic && state.role
+        ? '<button class="op login-back" data-action="logout">' + L('退出当前登录', 'Sign out') + '</button>'
+        : '') +
       '</section></div>';
     var input = document.getElementById('token-input');
     if (input) input.focus();
+  }
+
+  function renderReaderNotice() {
+    view.innerHTML =
+      '<div class="workspace"><section class="panel glass main-panel">' +
+      '<div class="empty-state"><p class="empty-title">' + L('读者账号', 'Reader account') + '</p>' +
+      '<p class="empty-text">' +
+      L(
+        '读者账号没有管理权限。请返回博客，阅读指定给你的私密文章。',
+        'Reader accounts have no admin access. Return to the blog to read private posts shared with you.'
+      ) +
+      '</p><div class="publish-actions"><a class="az-button" href="' + hrefFor('index.html') + '">' +
+      L('返回博客', 'Back to blog') + '</a>' +
+      '<button class="op" data-action="logout">' + L('退出', 'Sign out') + '</button></div>' +
+      '</div></section></div>';
+    setDefaultStatus();
   }
 
   /* ---------- admin: layout ---------- */
@@ -1110,6 +1289,37 @@
     return state.editingSlug ? L('保存修改', 'Save changes') : L('发布文章', 'Publish post');
   }
 
+  function accessPickerHtml(d) {
+    function group(kind, label, items, chosen) {
+      if (!items.length) {
+        return '<p class="hint">' + L('暂无' + label + '。', 'No ' + label + ' yet.') + '</p>';
+      }
+      return (
+        '<div class="access-group"><div class="tax-head"><span>' + label + '</span></div>' +
+        '<div class="access-list">' +
+        items.map(function (item) {
+          var checked = chosen.indexOf(item.name) >= 0;
+          return '<label class="check"><input type="checkbox" data-access-kind="' + kind +
+            '" data-access-name="' + esc(item.name) + '"' + (checked ? ' checked' : '') + '>' +
+            esc(item.name) + '</label>';
+        }).join('') +
+        '</div></div>'
+      );
+    }
+    return (
+      '<div class="access-picker">' +
+      '<p class="hint">' +
+      L(
+        '只有管理员、文章作者和你勾选的人能看到这篇私密文章。',
+        'Only the admin, the post author and the people you tick can see this private post.'
+      ) +
+      '</p>' +
+      group('author', L('作者', 'Authors'), state.authors, d.accessAuthors) +
+      group('reader', L('读者用户', 'Readers'), state.readers, d.accessReaders) +
+      '</div>'
+    );
+  }
+
   function publishPanel() {
     var d = state.draft;
     var editing = !!state.editingSlug;
@@ -1129,6 +1339,15 @@
           L('置顶', 'Pinned') + '</label>' +
           '<label class="check"><input type="checkbox" data-flag="featured"' + (d.featured ? ' checked' : '') + '>' +
           L('精选', 'Featured') + '</label>' +
+          '</div>' +
+          '<div class="field"><span class="field-label">' + L('可见性', 'Visibility') + '</span>' +
+          '<div class="flag-row">' +
+          '<label class="check"><input type="radio" name="visibility" data-visibility="public"' +
+          (d.visibility !== 'private' ? ' checked' : '') + '>' + L('公开', 'Public') + '</label>' +
+          '<label class="check"><input type="radio" name="visibility" data-visibility="private"' +
+          (d.visibility === 'private' ? ' checked' : '') + '>' + L('私密', 'Private') + '</label>' +
+          '</div>' +
+          (d.visibility === 'private' ? accessPickerHtml(d) : '') +
           '</div>'
         : '') +
       '<div class="publish-actions">' +
@@ -1139,8 +1358,9 @@
         ? '<a class="op" href="' + esc(rendererUrlFromMarkdown(d.content)) + '" target="_blank" rel="noopener">' +
           L('新标签页预览', 'Preview in new tab') + '</a>' +
           (state.draftStatus === 'published'
-            ? '<a class="op" href="' + hrefFor('index.html', '#/post/' + encodeURIComponent(state.editingSlug)) +
-              '" target="_blank" rel="noopener">' + L('查看文章', 'View post') + '</a>'
+            ? '<a class="op" href="' + hrefFor('index.html', '#/post/' + encodeURIComponent(state.editingSlug)) + '"' +
+              (d.visibility === 'private' ? '' : ' target="_blank" rel="noopener"') + '>' +
+              L('查看文章', 'View post') + '</a>'
             : '')
         : '<button class="op" data-action="clear-draft">' + L('清空', 'Clear') + '</button>') +
       '</div>' +
@@ -1202,23 +1422,31 @@
   function taxonomyPanel() {
     function rowsFor(kind, manageable) {
       var isAuthor = kind === 'author';
-      var items = isAuthor ? state.authors : state.categories;
+      var isReader = kind === 'reader';
+      var items = isReader ? state.readers : (isAuthor ? state.authors : state.categories);
       if (!items.length) return '<p class="hint">' + L('暂无。', 'None.') + '</p>';
       return items
         .map(function (item) {
           return (
             '<div class="tax-row">' +
-            '<button class="tax-name" data-action="tax-pick" data-kind="' + kind + '" data-name="' +
-            esc(item.name) + '">' + esc(item.name) + '</button>' +
-            '<span class="tax-count">' + Number(item.count || 0) + '</span>' +
+            (isReader
+              ? '<span class="tax-name">' + esc(item.name) + '</span>'
+              : '<button class="tax-name" data-action="tax-pick" data-kind="' + kind + '" data-name="' +
+                esc(item.name) + '">' + esc(item.name) + '</button>') +
+            '<span class="tax-count">' +
+            (isReader ? L('读者', 'Reader') : Number(item.count || 0)) +
+            '</span>' +
             (isAuthor && manageable
               ? '<button class="op tax-token" data-action="rename-author" data-name="' + esc(item.name) + '">' +
-                L('改名', 'Rename') + '</button>' +
-                '<button class="op tax-token" data-action="issue-token" data-name="' + esc(item.name) + '">' +
+                L('改名', 'Rename') + '</button>'
+              : '') +
+            ((isAuthor || isReader) && manageable
+              ? '<button class="op tax-token" data-action="issue-token" data-kind="' + kind + '" data-name="' +
+                esc(item.name) + '">' +
                 (item.has_token ? L('换令牌', 'New token') : L('发令牌', 'Token')) + '</button>' +
                 (item.has_token
-                  ? '<button class="op tax-token" data-action="revoke-token" data-name="' + esc(item.name) + '">' +
-                    L('撤销', 'Revoke') + '</button>'
+                  ? '<button class="op tax-token" data-action="revoke-token" data-kind="' + kind +
+                    '" data-name="' + esc(item.name) + '">' + L('撤销', 'Revoke') + '</button>'
                   : '')
               : '') +
             (manageable
@@ -1233,11 +1461,16 @@
 
     function block(kind, manageable) {
       var isCat = kind === 'category';
-      var label = isCat ? L('分类', 'Categories') : L('作者', 'Authors');
-      var newLabel = isCat ? L('新分类', 'New category') : L('新作者', 'New author');
+      var isReader = kind === 'reader';
+      var label = isCat
+        ? L('分类', 'Categories')
+        : isReader ? L('读者用户', 'Readers') : L('作者', 'Authors');
+      var newLabel = isCat
+        ? L('新分类', 'New category')
+        : isReader ? L('新读者', 'New reader') : L('新作者', 'New author');
       return (
         '<div class="tax-block"><div class="tax-head"><span>' + label + '</span><span class="tax-hint">' +
-        L('点击选用', 'Click to use') + '</span></div>' +
+        (isReader ? '' : L('点击选用', 'Click to use')) + '</span></div>' +
         '<div class="tax-list">' + rowsFor(kind, manageable) + '</div>' +
         (manageable
           ? '<div class="tax-add"><input id="tax-' + kind + '-input" class="az-input" placeholder="' + newLabel +
@@ -1261,9 +1494,11 @@
 
     return (
       '<section class="panel glass side-panel tax-panel">' +
-      '<div class="panel-head"><h2 class="panel-title">' + L('分类与作者', 'Categories & authors') + '</h2></div>' +
+      '<div class="panel-head"><h2 class="panel-title">' +
+      L('分类、作者与读者', 'Categories, authors & readers') + '</h2></div>' +
       block('category', true) +
       block('author', true) +
+      block('reader', true) +
       '</section>'
     );
   }
@@ -1329,8 +1564,9 @@
                 '<button class="op" data-action="view-versions" data-slug="' + esc(post.slug) + '">' +
                 L('版本', 'Versions') + '</button>'
               : (post.status === 'published'
-                ? '<a class="op" href="' + hrefFor('index.html', '#/post/' + encodeURIComponent(post.slug)) +
-                  '" target="_blank" rel="noopener">' + L('查看', 'View') + '</a>'
+                ? '<a class="op" href="' + hrefFor('index.html', '#/post/' + encodeURIComponent(post.slug)) + '"' +
+                  (post.visibility === 'private' ? '' : ' target="_blank" rel="noopener"') + '>' +
+                  L('查看', 'View') + '</a>'
                 : '') +
                 '<button class="op" data-action="edit-post" data-slug="' + esc(post.slug) + '">' +
                 L('编辑', 'Edit') + '</button>' +
@@ -1953,6 +2189,13 @@
       pinned: Boolean(d.pinned),
       featured: Boolean(d.featured)
     };
+    if (state.isAdmin) {
+      payload.visibility = d.visibility === 'private' ? 'private' : 'public';
+      payload.access = {
+        authors: d.accessAuthors.slice(),
+        readers: d.accessReaders.slice()
+      };
+    }
     var created = fromLocalInput(d.created_at);
     if (created) payload.created_at = created;
     var editingSlug = state.editingSlug;
@@ -2178,18 +2421,20 @@
     }
   }
 
-  function showTokenModal(name, token) {
+  function showTokenModal(name, token, kind) {
     closeTokenModal();
+    var isReader = kind === 'reader';
     var wrap = document.createElement('div');
     wrap.className = 'modal-backdrop';
     wrap.innerHTML =
       '<section class="panel glass token-modal" role="dialog" aria-modal="true">' +
       '<button class="token-close" data-token-action="close" aria-label="' + L('关闭', 'Close') + '">X</button>' +
-      '<h2 class="panel-title">' + L('作者令牌', 'Author token') + '</h2>' +
+      '<h2 class="panel-title">' +
+      (isReader ? L('读者令牌', 'Reader token') : L('作者令牌', 'Author token')) + '</h2>' +
       '<p class="token-name">' + esc(name) + '</p>' +
       '<p class="token-hint">' +
       L(
-        '令牌只显示这一次。请立即复制并安全发送给该作者；重新生成后旧令牌会立即失效。',
+        '令牌只显示这一次。请立即复制并安全发送给对方；重新生成后旧令牌会立即失效。',
         'This token is shown only once. Copy it now and send it securely; generating a new token invalidates the old one.'
       ) +
       '</p>' +
@@ -2220,40 +2465,51 @@
     });
   }
 
-  async function issueToken(name) {
+  async function loadReaders(force) {
     if (!state.isAdmin) return;
-    var author = state.authors.find(function (a) {
+    if (!force && state.readers.length) return;
+    var data = await request('/admin/readers', { auth: true });
+    state.readers = data.readers || [];
+  }
+
+  async function issueToken(name, kind) {
+    if (!state.isAdmin) return;
+    var isReader = kind === 'reader';
+    var items = isReader ? state.readers : state.authors;
+    var person = items.find(function (a) {
       return a.name === name;
     });
-    if (author && author.has_token && !confirm(L(
+    if (person && person.has_token && !confirm(L(
       '重新生成令牌？旧令牌会立即失效。',
       'Generate a new token? The old token stops working immediately.'
     ))) return;
+    var path = isReader
+      ? '/admin/readers/' + encodeURIComponent(name) + '/token'
+      : '/authors/' + encodeURIComponent(name) + '/token';
     try {
-      var data = await request('/authors/' + encodeURIComponent(name) + '/token', {
-        method: 'POST',
-        auth: true
-      });
-      showTokenModal(name, data.token);
-      await loadTaxonomy(true);
+      var data = await request(path, { method: 'POST', auth: true });
+      showTokenModal(name, data.token, kind);
+      if (isReader) await loadReaders(true);
+      else await loadTaxonomy(true);
       await renderRoute();
     } catch (e) {
       if (!authError(e)) setStatus(e.message, 'error');
     }
   }
 
-  async function revokeToken(name) {
+  async function revokeToken(name, kind) {
     if (!state.isAdmin) return;
-    if (!confirm(L(
-      '撤销该作者的令牌？对方下次请求时会被登出。',
-      'Revoke this author token? They will be signed out on their next request.'
-    ))) return;
+    var isReader = kind === 'reader';
+    if (!confirm(isReader
+      ? L('撤销该读者的令牌？对方下次请求时会被登出。', 'Revoke this reader token? They will be signed out on their next request.')
+      : L('撤销该作者的令牌？对方下次请求时会被登出。', 'Revoke this author token? They will be signed out on their next request.'))) return;
+    var path = isReader
+      ? '/admin/readers/' + encodeURIComponent(name) + '/token'
+      : '/authors/' + encodeURIComponent(name) + '/token';
     try {
-      await request('/authors/' + encodeURIComponent(name) + '/token', {
-        method: 'DELETE',
-        auth: true
-      });
-      await loadTaxonomy(true);
+      await request(path, { method: 'DELETE', auth: true });
+      if (isReader) await loadReaders(true);
+      else await loadTaxonomy(true);
       setStatus(L('令牌已撤销', 'Token revoked'));
       await renderRoute();
     } catch (e) {
@@ -2265,13 +2521,16 @@
     var input = document.getElementById('tax-' + kind + '-input');
     var name = input ? input.value.trim() : '';
     if (!name) return;
-    var path = kind === 'category' ? '/categories' : '/authors';
+    var path = kind === 'category' ? '/categories' : kind === 'reader' ? '/admin/readers' : '/authors';
     try {
       await request(path, { method: 'POST', body: { name: name }, auth: true });
       if (kind === 'category' && !state.draft.category) state.draft.category = name;
       if (kind === 'author' && !state.draft.author) state.draft.author = name;
-      await loadTaxonomy(true);
-      setStatus(kind === 'category' ? L('已添加分类', 'Category added') : L('已添加作者', 'Author added'));
+      if (kind === 'reader') await loadReaders(true);
+      else await loadTaxonomy(true);
+      setStatus(kind === 'category'
+        ? L('已添加分类', 'Category added')
+        : kind === 'reader' ? L('已添加读者', 'Reader added') : L('已添加作者', 'Author added'));
       await renderRoute();
     } catch (e) {
       if (!authError(e)) setStatus(e.message, 'error');
@@ -2281,12 +2540,16 @@
   async function deleteTaxonomy(kind, name) {
     var prompt = kind === 'category'
       ? L('删除分类「' + name + '」？', 'Delete category “' + name + '”?')
-      : L('删除作者「' + name + '」？', 'Delete author “' + name + '”?');
+      : kind === 'reader'
+        ? L('删除读者「' + name + '」？对方将无法再登录，并失去所有私密文章访问权。',
+          'Delete reader “' + name + '”? They can no longer sign in and lose access to all private posts.')
+        : L('删除作者「' + name + '」？', 'Delete author “' + name + '”?');
     if (!confirm(prompt)) return;
-    var path = kind === 'category' ? '/categories/' : '/authors/';
+    var path = kind === 'category' ? '/categories/' : kind === 'reader' ? '/admin/readers/' : '/authors/';
     try {
       await request(path + encodeURIComponent(name), { method: 'DELETE', auth: true });
-      await loadTaxonomy(true);
+      if (kind === 'reader') await loadReaders(true);
+      else await loadTaxonomy(true);
       setStatus(L('已删除', 'Deleted'));
       await renderRoute();
     } catch (e) {
@@ -2463,16 +2726,22 @@
         break;
       case 'filter-category':
         state.category = target.dataset.category || '';
-        if (state.route && state.route.name === 'home') renderRoute();
-        else location.hash = '#/';
+        backToFirstPage();
         break;
       case 'tag-search':
         state.query = target.dataset.tag || '';
         state.category = '';
         searchInput.value = state.query;
-        if (state.route && state.route.name === 'home') renderRoute();
-        else location.hash = '#/';
+        backToFirstPage();
         break;
+      case 'page-goto':
+        goPage(target.dataset.page);
+        break;
+      case 'page-jump': {
+        var jumpField = view.querySelector('[data-page-jump]');
+        if (jumpField && String(jumpField.value).trim()) goPage(jumpField.value);
+        break;
+      }
       case 'edit-post':
         if (slug) location.hash = '#/admin/edit/' + encodeURIComponent(slug);
         break;
@@ -2597,10 +2866,10 @@
         deleteTaxonomy(target.dataset.kind, target.dataset.name);
         break;
       case 'issue-token':
-        issueToken(target.dataset.name);
+        issueToken(target.dataset.name, target.dataset.kind);
         break;
       case 'revoke-token':
-        revokeToken(target.dataset.name);
+        revokeToken(target.dataset.name, target.dataset.kind);
         break;
       case 'tax-pick': {
         var kind = target.dataset.kind;
@@ -2681,6 +2950,23 @@
       return;
     }
 
+    if (target.dataset && target.dataset.visibility) {
+      state.draft.visibility = target.dataset.visibility === 'private' ? 'private' : 'public';
+      renderRoute();
+      return;
+    }
+
+    if (target.dataset && target.dataset.accessKind) {
+      var accessKey = target.dataset.accessKind === 'reader' ? 'accessReaders' : 'accessAuthors';
+      var accessName = target.dataset.accessName || '';
+      var accessList = state.draft[accessKey].slice();
+      var at = accessList.indexOf(accessName);
+      if (target.checked && at < 0) accessList.push(accessName);
+      if (!target.checked && at >= 0) accessList.splice(at, 1);
+      state.draft[accessKey] = accessList;
+      return;
+    }
+
     if (target.dataset && target.dataset.logFile !== undefined) {
       state.logFile = target.value;
       renderRoute();
@@ -2730,6 +3016,9 @@
     } else if (event.target.id === 'tax-author-input') {
       event.preventDefault();
       addTaxonomy('author');
+    } else if (event.target.id === 'tax-reader-input') {
+      event.preventDefault();
+      addTaxonomy('reader');
     }
   });
 
@@ -2748,16 +3037,42 @@
       var auth = await request('/auth', { method: 'POST', body: { token: token } });
       setToken(token);
       applyIdentity(auth);
+      if (PAGE === 'public') {
+        setStatus(auth.role === 'admin'
+          ? L('已以管理员身份登录', 'Signed in as admin')
+          : L('已以' + (auth.role === 'reader' ? '读者' : '作者') + '身份登录：' + auth.name,
+            'Signed in as ' + auth.role + ': ' + auth.name));
+        if (location.hash === '#/login') location.hash = '#/';
+        else renderRoute();
+        return;
+      }
       setStatus(auth.role === 'admin'
         ? L('已进入管理台', 'Signed in as admin')
-        : L('已以作者身份登录：' + auth.name, 'Signed in as author: ' + auth.name));
+        : auth.role === 'reader'
+          ? L('读者账号请返回博客阅读私密文章', 'Reader accounts read private posts on the blog')
+          : L('已以作者身份登录：' + auth.name, 'Signed in as author: ' + auth.name));
       renderRoute();
     } catch (e) {
       if (button) button.disabled = false;
       setStatus(e.status === 429 ? e.message : L('令牌无效', 'Invalid token'), 'error');
-      renderLogin(e.message);
+      renderLogin(e.message, PAGE === 'public' ? 'public' : 'admin');
     }
   });
+
+  if (navLogin) {
+    navLogin.addEventListener('click', function () {
+      if (PAGE !== 'public') return;
+      if (state.role) {
+        clearToken();
+        setStatus(L('已退出登录', 'Signed out'));
+        if (location.hash === '#/login') location.hash = '#/';
+        else renderRoute();
+        return;
+      }
+      if (location.hash === '#/login') renderRoute();
+      else location.hash = '#/login';
+    });
+  }
 
   langToggle.addEventListener('click', function () {
     setLang(lang === 'en' ? 'zh' : 'en');
@@ -2790,10 +3105,7 @@
     searchInput.addEventListener('input', function () {
       state.query = searchInput.value.trim();
       clearTimeout(searchTimer);
-      searchTimer = setTimeout(function () {
-        if (state.route && state.route.name === 'home') renderRoute();
-        else location.hash = '#/';
-      }, 280);
+      searchTimer = setTimeout(backToFirstPage, 280);
     });
   }
 
@@ -2803,15 +3115,20 @@
     if (event.key === 'Escape') {
       closeTokenModal();
       closeAiModal();
+      return;
+    }
+    if (event.key === 'Enter' && event.target && event.target.matches &&
+        event.target.matches('[data-page-jump]')) {
+      event.preventDefault();
+      goPage(event.target.value);
     }
   });
 
   async function init() {
-    if (PAGE === 'public') state.token = '';
     applyTheme(readTheme(), false);
     applyStaticLang();
     if (searchInput) searchInput.value = state.query;
-    if (PAGE === 'admin' && state.token) await verifyToken();
+    if (state.token) await verifyToken();
     updateTopbar();
     setDefaultStatus();
     await renderRoute();
