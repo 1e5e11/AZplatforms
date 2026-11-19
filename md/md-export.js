@@ -2,6 +2,30 @@
 (() => {
   'use strict';
   const WIDTH = 896, SCALE = 2;
+  const SCRIPT_BASE = new URL('.', document.currentScript.src);
+  const libraryLoads = new Map();
+  let libraries;
+  function loadLibrary(file) {
+    const url = new URL(`vendor/${file}`, SCRIPT_BASE).href;
+    if (!libraryLoads.has(url)) libraryLoads.set(url, new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = url;
+      script.onload = () => resolve();
+      script.onerror = () => { libraryLoads.delete(url); script.remove(); reject(new Error(`导出组件加载失败：vendor/${file}，请检查网络或 vendor 文件。`)); };
+      document.head.append(script);
+    }));
+    return libraryLoads.get(url);
+  }
+  // 导出库接近 1 MB，首次导出时再按依赖顺序加载。
+  function ensureLibraries() {
+    if (!libraries) libraries = (async () => {
+      await loadLibrary('html2canvas.min.js');
+      await loadLibrary('jspdf.umd.min.js');
+      await loadLibrary('opentype.min.js');
+      await loadLibrary('svg2pdf.umd.min.js');
+    })().catch(error => { libraries = null; throw error; });
+    return libraries;
+  }
   const css = `
     .moye-export{box-sizing:border-box;width:896px;padding:48px;background:#fff;color:#171315;
       font:16px 'Times New Roman','宋体',serif;--az-accent:#7c0a21;--az-accent-alpha:#7c0a2164;
@@ -31,9 +55,10 @@
     .moye-export table{border-collapse:collapse;display:table;max-width:100%;font-size:14px;table-layout:fixed;width:100%}
     .moye-export th,.moye-export td{padding:8px 14px;border:1px solid #7c0a2164;text-align:left;overflow-wrap:anywhere}
     .moye-export th{color:#7c0a21;font-weight:400}.moye-export del{color:#7c0a21;text-decoration-thickness:2px}
-    .moye-export hr{border:0;border-top:1px solid #7c0a2164;margin:28px 0}.moye-export img,.moye-export svg{max-width:100%;height:auto}
+    .moye-export hr{border:0;border-top:1px solid #7c0a2164;margin:28px 0}.moye-export img,.moye-export svg:not(.katex svg){max-width:100%;height:auto}
     .moye-export .math-display{max-width:100%;margin:22px 0;padding:4px 0;overflow:hidden;text-align:center}
     .moye-export .math-display>.katex-display{margin:0}.moye-export .math-inline{white-space:nowrap}
+    .moye-export .katex .frac-line,.moye-export .katex .overline-line,.moye-export .katex .underline-line,.moye-export .katex .hline,.moye-export .katex .hdashline{border-bottom-width:max(.04em,1px)!important}.moye-export .katex .sqrt-line{border-top-width:max(.04em,1px)!important}
     .moye-export .toc-link{display:block;font-size:14px;line-height:30px;padding-left:calc(10px + var(--depth,0)*14px);text-decoration:none}
     .moye-export .toc-page{float:right;font-size:10px;margin-left:8px}
     .moye-export .document-page{display:flow-root}.moye-export .document-page+.document-page{margin-top:48px;padding-top:32px;border-top:1px solid #7c0a2164}
@@ -79,6 +104,7 @@
     return new Blob([`<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${safeTitle.outerHTML}<style>${styles(syntax, math)}</style></head><body style="margin:0;background:white">${wrap.outerHTML}</body></html>`], { type:'text/html;charset=utf-8' });
   }
   async function stage(article, syntax) {
+    await ensureLibraries();
     if (!window.html2canvas) throw new Error('导出组件未加载，请检查 vendor 文件。');
     const root = document.createElement('div'); root.className = 'moye-export';
     root.dataset.theme = 'light'; root.style.cssText = 'position:absolute;left:-10000px;top:0;pointer-events:none';
@@ -127,6 +153,7 @@
     return end;
   }
   async function pdf(article, syntax, title, progress = () => {}, mode = 'text') {
+    await ensureLibraries();
     if (!window.jspdf?.jsPDF) throw new Error('PDF 组件未加载，请检查 vendor 文件。');
     if (!['image', 'vector', 'text'].includes(mode)) throw new Error('不支持的 PDF 内容类型。');
     const root = await stage(article, syntax);
