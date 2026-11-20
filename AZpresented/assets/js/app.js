@@ -916,12 +916,11 @@
     return (day.by && day.by[state.contribAuthor]) || 0;
   }
 
-  function contribLevel(n) {
+  function contribShade(n, max) {
     if (!n) return 0;
-    if (n === 1) return 1;
-    if (n === 2) return 2;
-    if (n < 5) return 3;
-    return 4;
+    if (max <= 1) return 100;
+    var ratio = (n - 1) / (max - 1);
+    return Math.round(16 + 84 * Math.sqrt(ratio));
   }
 
   function contribWeeks(data) {
@@ -977,7 +976,7 @@
       .join('');
   }
 
-  function contribCellsHtml(weeks) {
+  function contribCellsHtml(weeks, max) {
     var out = '';
     weeks.forEach(function (week) {
       for (var i = 0; i < 7; i += 1) {
@@ -997,9 +996,12 @@
             return esc(p.title);
           });
         if (listed.length) title += '&#10;' + listed.join('&#10;');
-        var cls = 'contrib-cell lvl-' + contribLevel(n) +
-          (state.contribDay === day.date ? ' is-active' : '');
-        out += '<span class="' + cls + '" data-action="contrib-day" data-date="' + day.date +
+        var shade = contribShade(n, max);
+        var style = shade
+          ? ' style="background:color-mix(in srgb,var(--az-accent) ' + shade + '%,transparent)"'
+          : '';
+        var cls = 'contrib-cell' + (state.contribDay === day.date ? ' is-active' : '');
+        out += '<span class="' + cls + '"' + style + ' data-action="contrib-day" data-date="' + day.date +
           '" title="' + title + '"></span>';
       }
     });
@@ -1041,9 +1043,11 @@
     var longest = 0;
     var run = 0;
     var total = 0;
+    var maxDay = 0;
     seq.forEach(function (day) {
       var n = contribCount(day);
       total += n;
+      if (n > maxDay) maxDay = n;
       if (n > 0) {
         activeDays += 1;
         run += 1;
@@ -1065,10 +1069,7 @@
     var weekdays = lang === 'en'
       ? ['', 'Mon', '', 'Wed', '', 'Fri', '']
       : ['', '一', '', '三', '', '五', ''];
-    var legend = '';
-    for (var i = 0; i <= 4; i += 1) {
-      legend += '<span class="contrib-cell lvl-' + i + '"></span>';
-    }
+    var legend = '<span class="contrib-scale" aria-hidden="true"></span>';
 
     return (
       '<div class="workspace"><section class="panel glass main-panel">' +
@@ -1089,10 +1090,14 @@
         return '<span>' + esc(w) + '</span>';
       }).join('') + '</div>' +
       '<div class="contrib-grid" style="grid-template-columns:repeat(' + grid.weeks.length +
-      ',var(--contrib-cell))">' + contribCellsHtml(grid.weeks) + '</div>' +
+      ',var(--contrib-cell))">' + contribCellsHtml(grid.weeks, maxDay) + '</div>' +
       '</div></div></div>' +
       '<div class="contrib-foot">' +
       '<span class="contrib-legend">' + L('少', 'Less') + legend + L('多', 'More') + '</span>' +
+      '<span class="contrib-legend-note">' + L(
+        maxDay ? '篇/天：1 → ' + maxDay : '篇/天：0',
+        maxDay ? 'posts/day: 1 → ' + maxDay : 'posts/day: 0'
+      ) + '</span>' +
       '<span class="contrib-summary">' + L(
         '活跃 ' + activeDays + ' 天 · 最长连续 ' + longest + ' 天',
         activeDays + ' active days · longest streak ' + longest
