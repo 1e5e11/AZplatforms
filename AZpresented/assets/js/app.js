@@ -254,6 +254,9 @@
     lastPage: 1,
     categories: [],
     authors: [],
+    contrib: null,
+    contribAuthor: '',
+    contribDay: '',
     readers: [],
     adminTab: 'write',
     draft: null,
@@ -593,6 +596,7 @@
       });
     if (parts[0] === 'post' && parts[1]) return { name: 'post', slug: parts[1] };
     if (parts[0] === 'login') return { name: 'login' };
+    if (parts[0] === 'contributions') return { name: 'contributions' };
     if (parts[0] === 'admin') {
       if (parts[1] === 'edit' && parts[2]) return { name: 'admin', edit: parts[2] };
       return { name: 'admin' };
@@ -635,7 +639,7 @@
       }
       if (route.name === 'home') route = { name: 'admin' };
       if (route.name !== 'admin') {
-        location.replace(hrefFor('index.html'));
+        location.replace(hrefFor('index.html', location.hash));
         return;
       }
     } else if (route.name === 'admin') {
@@ -653,6 +657,7 @@
     if (PAGE === 'public') {
       if (route.name === 'post') await renderArticle(route.slug, my);
       else if (route.name === 'login') renderLogin('', 'public');
+      else if (route.name === 'contributions') await renderContributions(my);
       else await renderHome(my);
       return;
     }
@@ -835,7 +840,8 @@
       '<div class="workspace">' +
       '<section class="panel glass main-panel">' +
       '<div class="panel-head"><h1 class="panel-title">' + L('最近文章', 'Recent posts') + '</h1>' +
-      '<span class="panel-note">' +
+      '<span class="panel-note"><a class="inline-link" href="#/contributions">' +
+      L('贡献墙 →', 'Contribution wall →') + '</a> · ' +
       (state.query || state.category
         ? L('筛选出 ' + state.total + ' 篇', state.total + ' found')
         : postCount(state.total)) +
@@ -874,6 +880,225 @@
       ) + '</div>' +
       '<p class="post-excerpt">' + esc(post.excerpt) + '</p>' +
       '</a></article>'
+    );
+  }
+
+  /* ---------- public: contribution wall ---------- */
+
+  var CONTRIB_DAY_MS = 86400000;
+
+  async function renderContributions(my) {
+    showLoading(L('正在统计投稿…', 'Counting contributions…'));
+    try {
+      var data = await request('/contributions?days=371', { auth: true });
+      if (my !== ticket) return;
+      state.contrib = data;
+      state.contribDay = '';
+      refreshContrib();
+      setDefaultStatus();
+    } catch (e) {
+      if (my !== ticket) return;
+      renderError(e.message);
+    }
+  }
+
+  function refreshContrib() {
+    var scroller = view.querySelector('.contrib-scroll');
+    var left = scroller ? scroller.scrollLeft : null;
+    view.innerHTML = contributionsHtml();
+    var next = view.querySelector('.contrib-scroll');
+    if (next) next.scrollLeft = left === null ? next.scrollWidth : left;
+  }
+
+  function contribCount(day) {
+    if (!day) return 0;
+    if (!state.contribAuthor) return day.count || 0;
+    return (day.by && day.by[state.contribAuthor]) || 0;
+  }
+
+  function contribLevel(n) {
+    if (!n) return 0;
+    if (n === 1) return 1;
+    if (n === 2) return 2;
+    if (n < 5) return 3;
+    return 4;
+  }
+
+  function contribWeeks(data) {
+    var byDate = {};
+    (data.days || []).forEach(function (day) {
+      byDate[day.date] = day;
+    });
+    var start = Date.parse(data.from + 'T00:00:00Z');
+    var end = Date.parse(data.to + 'T00:00:00Z');
+    var first = start - new Date(start).getUTCDay() * CONTRIB_DAY_MS;
+    var weeks = [];
+    var seq = [];
+    for (var t = first; t <= end; t += CONTRIB_DAY_MS) {
+      var d = new Date(t);
+      var iso = d.toISOString().slice(0, 10);
+      var col = Math.floor((t - first) / (7 * CONTRIB_DAY_MS));
+      if (!weeks[col]) weeks[col] = [null, null, null, null, null, null, null];
+      var inRange = iso >= data.from && iso <= data.to;
+      var cell = inRange ? byDate[iso] || { date: iso, count: 0, posts: [], by: {} } : null;
+      weeks[col][d.getUTCDay()] = cell;
+      if (cell) seq.push(cell);
+    }
+    var months = [];
+    var lastKey = '';
+    weeks.forEach(function (week, col) {
+      var sample = '';
+      for (var i = 0; i < 7; i += 1) {
+        if (week[i]) {
+          sample = week[i].date;
+          break;
+        }
+      }
+      if (!sample) return;
+      var key = sample.slice(0, 7);
+      if (key !== lastKey) {
+        lastKey = key;
+        months.push({ col: col, key: key });
+      }
+    });
+    return { weeks: weeks, months: months, seq: seq };
+  }
+
+  function contribMonthsHtml(months) {
+    var names = lang === 'en'
+      ? ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+      : [];
+    return months
+      .map(function (m) {
+        var num = Number(m.key.slice(5, 7)) - 1;
+        var label = lang === 'en' ? names[num] : Number(m.key.slice(5, 7)) + '月';
+        return '<span style="grid-column:' + (m.col + 1) + '">' + esc(label) + '</span>';
+      })
+      .join('');
+  }
+
+  function contribCellsHtml(weeks) {
+    var out = '';
+    weeks.forEach(function (week) {
+      for (var i = 0; i < 7; i += 1) {
+        var day = week[i];
+        if (!day) {
+          out += '<span class="contrib-cell pad"></span>';
+          continue;
+        }
+        var n = contribCount(day);
+        var title = day.date + ' · ' + L(n + ' 篇', n + (n === 1 ? ' post' : ' posts'));
+        var listed = day.posts
+          .filter(function (p) {
+            return !state.contribAuthor || p.author === state.contribAuthor;
+          })
+          .slice(0, 4)
+          .map(function (p) {
+            return esc(p.title);
+          });
+        if (listed.length) title += '&#10;' + listed.join('&#10;');
+        var cls = 'contrib-cell lvl-' + contribLevel(n) +
+          (state.contribDay === day.date ? ' is-active' : '');
+        out += '<span class="' + cls + '" data-action="contrib-day" data-date="' + day.date +
+          '" title="' + title + '"></span>';
+      }
+    });
+    return out;
+  }
+
+  function contribDayHtml() {
+    if (!state.contribDay || !state.contrib) return '';
+    var day = null;
+    (state.contrib.days || []).forEach(function (item) {
+      if (item.date === state.contribDay) day = item;
+    });
+    var posts = day ? day.posts : [];
+    if (state.contribAuthor) {
+      posts = posts.filter(function (p) {
+        return p.author === state.contribAuthor;
+      });
+    }
+    var body = posts.length
+      ? '<ul class="contrib-day-posts">' + posts.map(function (p) {
+        return '<li><a class="inline-link" href="#/post/' + encodeURIComponent(p.slug) + '">' +
+          esc(p.title) + '</a><span class="contrib-day-author">' + esc(p.author) + '</span></li>';
+      }).join('') + '</ul>'
+      : '<p class="empty-text">' + L('这一天没有文章。', 'Nothing published on this day.') + '</p>';
+    return (
+      '<div class="contrib-day">' +
+      '<div class="contrib-day-head"><strong>' + esc(state.contribDay) + '</strong>' +
+      '<button class="tag" data-action="contrib-close-day">' + L('收起', 'Close') + '</button></div>' +
+      body + '</div>'
+    );
+  }
+
+  function contributionsHtml() {
+    var data = state.contrib;
+    if (!data) return '';
+    var grid = contribWeeks(data);
+    var seq = grid.seq;
+    var activeDays = 0;
+    var longest = 0;
+    var run = 0;
+    var total = 0;
+    seq.forEach(function (day) {
+      var n = contribCount(day);
+      total += n;
+      if (n > 0) {
+        activeDays += 1;
+        run += 1;
+        if (run > longest) longest = run;
+      } else {
+        run = 0;
+      }
+    });
+
+    var chips = '<button class="tag' + (state.contribAuthor ? '' : ' active') +
+      '" data-action="contrib-author" data-author="">' + L('全部', 'All') + '</button>' +
+      (data.authors || []).map(function (author) {
+        var active = state.contribAuthor === author.name;
+        return '<button class="tag' + (active ? ' active' : '') + '" data-action="contrib-author" data-author="' +
+          esc(author.name) + '">' + esc(author.name) + ' <span class="contrib-chip-count">' +
+          author.count + '</span></button>';
+      }).join('');
+
+    var weekdays = lang === 'en'
+      ? ['', 'Mon', '', 'Wed', '', 'Fri', '']
+      : ['', '一', '', '三', '', '五', ''];
+    var legend = '';
+    for (var i = 0; i <= 4; i += 1) {
+      legend += '<span class="contrib-cell lvl-' + i + '"></span>';
+    }
+
+    return (
+      '<div class="workspace"><section class="panel glass main-panel">' +
+      '<div class="panel-head"><h1 class="panel-title">' + L('贡献墙', 'Contribution wall') + '</h1>' +
+      '<span class="panel-note">' + L('近 53 周', 'Last 53 weeks') + ' · ' +
+      L(total + ' 篇', total + (total === 1 ? ' post' : ' posts')) + '</span></div>' +
+      '<p class="contrib-intro">' + L(
+        '每格是一天，颜色越深表示当天发布的文章越多。点格子可以看当天的文章。',
+        'Each square is a day; darker means more posts published. Click a square to see that day’s posts.'
+      ) + '</p>' +
+      '<div class="contrib-chips">' + chips + '</div>' +
+      '<div class="contrib-scroll"><div class="contrib-grid-wrap">' +
+      '<div class="contrib-topline"><span class="contrib-gutter"></span>' +
+      '<div class="contrib-months" style="grid-template-columns:repeat(' + grid.weeks.length +
+      ',var(--contrib-cell))">' + contribMonthsHtml(grid.months) + '</div></div>' +
+      '<div class="contrib-main">' +
+      '<div class="contrib-weekdays">' + weekdays.map(function (w) {
+        return '<span>' + esc(w) + '</span>';
+      }).join('') + '</div>' +
+      '<div class="contrib-grid" style="grid-template-columns:repeat(' + grid.weeks.length +
+      ',var(--contrib-cell))">' + contribCellsHtml(grid.weeks) + '</div>' +
+      '</div></div></div>' +
+      '<div class="contrib-foot">' +
+      '<span class="contrib-legend">' + L('少', 'Less') + legend + L('多', 'More') + '</span>' +
+      '<span class="contrib-summary">' + L(
+        '活跃 ' + activeDays + ' 天 · 最长连续 ' + longest + ' 天',
+        activeDays + ' active days · longest streak ' + longest
+      ) + '</span></div>' +
+      contribDayHtml() +
+      '</section></div>'
     );
   }
 
@@ -2733,6 +2958,19 @@
         state.category = '';
         searchInput.value = state.query;
         backToFirstPage();
+        break;
+      case 'contrib-author':
+        state.contribAuthor = target.dataset.author || '';
+        state.contribDay = '';
+        refreshContrib();
+        break;
+      case 'contrib-day':
+        state.contribDay = state.contribDay === target.dataset.date ? '' : target.dataset.date || '';
+        refreshContrib();
+        break;
+      case 'contrib-close-day':
+        state.contribDay = '';
+        refreshContrib();
         break;
       case 'page-goto':
         goPage(target.dataset.page);
