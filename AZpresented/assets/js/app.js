@@ -33,6 +33,7 @@
   var searchInput = document.getElementById('search-input');
   var navAdmin = document.getElementById('nav-admin');
   var navLogin = document.getElementById('nav-login');
+  var navSubscribe = document.getElementById('nav-subscribe');
   var langToggle = document.getElementById('lang-toggle');
   var themeToggle = document.getElementById('theme-toggle');
 
@@ -151,7 +152,12 @@
     '无权操作这篇文章': 'You cannot edit this post',
     '分类不存在': 'Category does not exist',
     '作者不存在': 'Author not found',
-    '没有待审核的内容': 'Nothing to review'
+    '没有待审核的内容': 'Nothing to review',
+    '推送未启用': 'Push notifications are disabled',
+    '订阅地址无效': 'Invalid subscription endpoint',
+    '订阅密钥无效': 'Invalid subscription keys',
+    '订阅数量已达到上限': 'Subscription limit reached',
+    '私密文章不能发送提醒': 'Private posts cannot be notified'
   };
 
   function translateServerError(message) {
@@ -205,6 +211,7 @@
     langToggle.textContent = L('EN', '中');
     langToggle.setAttribute('aria-label', L('切换到英文', 'Switch to Chinese'));
     updateThemeToggle();
+    if (navSubscribe && !navSubscribe.hidden) updateSubscribeButton(state.pushStatus || 'idle');
   }
 
   function ApiError(status, message) {
@@ -277,7 +284,10 @@
     editingDeleted: false,
     draftStatus: 'published',
     draftNote: '',
-    draftPendingEdit: null
+    draftPendingEdit: null,
+    pushStatus: 'idle',
+    pushEnabled: false,
+    pushSubscribers: 0
   };
   state.draft = emptyDraft();
 
@@ -366,6 +376,7 @@
       created_at: toLocalInput(new Date()),
       pinned: false,
       featured: false,
+      notify: true,
       visibility: 'public',
       accessAuthors: [],
       accessReaders: []
@@ -385,6 +396,7 @@
       created_at: toLocalInput(post.created_at),
       pinned: Boolean(post.pinned),
       featured: Boolean(post.featured),
+      notify: false,
       visibility: post.visibility === 'private' ? 'private' : 'public',
       accessAuthors: Array.isArray(access.authors) ? access.authors.slice() : [],
       accessReaders: Array.isArray(access.readers) ? access.readers.slice() : []
@@ -577,6 +589,157 @@
       statusbar.textContent = '';
     }
     statusbar.dataset.tone = '';
+  }
+
+  /* ---------- push subscriptions ---------- */
+
+  var swRegistration = null;
+  var subscribeFlashTimer = null;
+
+  function pushSupported() {
+    return 'serviceWorker' in navigator && 'PushManager' in window &&
+      'Notification' in window && window.isSecureContext;
+  }
+
+  function base64urlToBytes(value) {
+    var text = String(value || '').replace(/-/g, '+').replace(/_/g, '/');
+    while (text.length % 4) text += '=';
+    var binary = atob(text);
+    var bytes = new Uint8Array(binary.length);
+    for (var i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  }
+
+  function siteRootUrl() {
+    return location.origin + location.pathname.replace(/[^/]*$/, '');
+  }
+
+  function updateSubscribeButton(status) {
+    state.pushStatus = status;
+    clearTimeout(subscribeFlashTimer);
+    if (!navSubscribe) return;
+    navSubscribe.dataset.state = status;
+    if (status === 'subscribed') {
+      navSubscribe.textContent = L('已订阅', 'Subscribed');
+      navSubscribe.title = L(
+        '新文章发布时会在浏览器通知你，点击取消订阅',
+        'New posts trigger a browser notification. Click to unsubscribe.'
+      );
+    } else if (status === 'busy') {
+      navSubscribe.textContent = L('订阅中…', 'Subscribing…');
+      navSubscribe.title = '';
+    } else if (status === 'denied') {
+      navSubscribe.textContent = L('通知关闭', 'Off');
+      navSubscribe.title = L(
+        '浏览器已禁止本站通知，请在站点设置中允许',
+        'Notifications are blocked for this site. Allow them in site settings.'
+      );
+    } else {
+      navSubscribe.textContent = L('订阅', 'Subscribe');
+      navSubscribe.title = L(
+        '订阅新文章提醒，提醒不包含文章内容',
+        'Get a browser notification when a new post is published. No article content is included.'
+      );
+    }
+    navSubscribe.disabled = status === 'busy';
+    navSubscribe.hidden = false;
+  }
+
+  function flashSubscribeButton(text) {
+    if (!navSubscribe) return;
+    navSubscribe.textContent = text;
+    clearTimeout(subscribeFlashTimer);
+    subscribeFlashTimer = setTimeout(function () {
+      updateSubscribeButton(state.pushStatus || 'idle');
+    }, 4000);
+  }
+
+  async function setupPush() {
+    if (!navSubscribe) return;
+    if (!pushSupported()) {
+      navSubscribe.hidden = true;
+      return;
+    }
+    navSubscribe.hidden = false;
+    updateSubscribeButton('idle');
+    try {
+      var reg = await navigator.serviceWorker.register('sw.js');
+      swRegistration = reg;
+      var sub = await reg.pushManager.getSubscription();
+      updateSubscribeButton(
+        sub ? 'subscribed' : (Notification.permission === 'denied' ? 'denied' : 'idle')
+      );
+    } catch (e) {
+      navSubscribe.hidden = true;
+      swRegistration = null;
+    }
+  }
+
+  async function togglePushSubscription() {
+    if (!navSubscribe || !swRegistration || state.pushStatus === 'busy') return;
+    var reg = swRegistration;
+    var existing = null;
+    try {
+      existing = await reg.pushManager.getSubscription();
+    } catch (e) {
+      existing = null;
+    }
+    if (existing) {
+      updateSubscribeButton('busy');
+      try {
+        await request('/push/unsubscribe', { method: 'POST', body: { endpoint: existing.endpoint } });
+      } catch (e) {
+        /* still remove the local subscription */
+      }
+      try {
+        await existing.unsubscribe();
+      } catch (e) {
+        /* ignore */
+      }
+      updateSubscribeButton('idle');
+      setStatus(L('已取消订阅', 'Unsubscribed'));
+      return;
+    }
+    updateSubscribeButton('busy');
+    try {
+      var permission = Notification.permission;
+      if (permission !== 'granted') permission = await Notification.requestPermission();
+      if (permission !== 'granted') {
+        updateSubscribeButton(permission === 'denied' ? 'denied' : 'idle');
+        flashSubscribeButton(L('请允许通知', 'Allow notifications'));
+        setStatus(L('需要允许通知才能订阅', 'Allow notifications to subscribe'), 'error');
+        return;
+      }
+      var keyData = await request('/push/public-key');
+      if (!keyData || !keyData.enabled || !keyData.publicKey) {
+        updateSubscribeButton('idle');
+        flashSubscribeButton(L('未启用提醒', 'Not available'));
+        setStatus(L('服务器未启用推送提醒', 'Push notifications are not enabled on the server'), 'error');
+        return;
+      }
+      var sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: base64urlToBytes(keyData.publicKey)
+      });
+      var json = typeof sub.toJSON === 'function' ? sub.toJSON() : {};
+      await request('/push/subscribe', {
+        method: 'POST',
+        body: {
+          endpoint: sub.endpoint,
+          keys: json.keys || {},
+          site: siteRootUrl()
+        }
+      });
+      updateSubscribeButton('subscribed');
+      setStatus(L(
+        '已订阅，新文章发布会收到提醒',
+        'Subscribed — you will be notified when new posts are published'
+      ));
+    } catch (e) {
+      updateSubscribeButton(Notification.permission === 'denied' ? 'denied' : 'idle');
+      flashSubscribeButton(L('订阅失败', 'Subscribe failed'));
+      setStatus(e && e.message ? e.message : L('订阅失败', 'Subscription failed'), 'error');
+    }
   }
 
   /* ---------- routing ---------- */
@@ -1221,9 +1384,17 @@
       } else {
         applyTaxonomyDefaults();
         if (state.adminTab === 'manage') {
-          var list = await request('/admin/posts', { auth: true });
+          var manageData = await Promise.all([
+            request('/admin/posts', { auth: true }),
+            request('/admin/push', { auth: true }).catch(function () {
+              return { enabled: false, subscribers: 0 };
+            })
+          ]);
           if (my !== ticket) return;
+          var list = manageData[0];
           state.adminPosts = list.posts || [];
+          state.pushEnabled = Boolean(manageData[1].enabled);
+          state.pushSubscribers = Number(manageData[1].subscribers || 0);
           var available = {};
           state.adminPosts.forEach(function (post) {
             if (!post.deleted) available[post.slug] = true;
@@ -1578,7 +1749,13 @@
           (d.visibility === 'private' ? ' checked' : '') + '>' + L('私密', 'Private') + '</label>' +
           '</div>' +
           (d.visibility === 'private' ? accessPickerHtml(d) : '') +
-          '</div>'
+          '</div>' +
+          (!editing && d.visibility !== 'private'
+            ? '<div class="flag-row notify-row">' +
+              '<label class="check"><input type="checkbox" data-notify' +
+              (d.notify ? ' checked' : '') + '>' + L('向订阅者发送提醒', 'Notify subscribers') +
+              '</label></div>'
+            : '')
         : '') +
       '<div class="publish-actions">' +
       '<button class="az-confirm publish-button" data-action="publish"' +
@@ -1591,6 +1768,10 @@
             ? '<a class="op" href="' + hrefFor('index.html', '#/post/' + encodeURIComponent(state.editingSlug)) + '"' +
               (d.visibility === 'private' ? '' : ' target="_blank" rel="noopener"') + '>' +
               L('查看文章', 'View post') + '</a>'
+            : '') +
+          (state.isAdmin && state.draftStatus === 'published' && d.visibility !== 'private'
+            ? '<button class="op" data-action="notify-post" data-slug="' +
+              esc(state.editingSlug) + '">' + L('通知订阅者', 'Notify subscribers') + '</button>'
             : '')
         : '<button class="op" data-action="clear-draft">' + L('清空', 'Clear') + '</button>') +
       '</div>' +
@@ -1764,9 +1945,16 @@
       '<div class="stat-row"><span>' + L('在用', 'Active') + '</span><span class="stat-num">' + active + '</span></div>' +
       '<div class="stat-row"><span>' + L('待审核', 'Pending') + '</span><span class="stat-num">' + pending + '</span></div>' +
       '<div class="stat-row"><span>' + L('回收站', 'Trash') + '</span><span class="stat-num">' + deleted + '</span></div>' +
+      '<div class="stat-row"><span>' + L('订阅者', 'Subscribers') + '</span><span class="stat-num">' +
+      Number(state.pushSubscribers || 0) + '</span></div>' +
       '<p class="hint">' +
       L('删除的文章保留全部历史版本，可随时恢复。', 'Deleted posts keep every version and can be restored at any time.') +
-      '</p></section>'
+      '</p>' +
+      (state.pushEnabled
+        ? ''
+        : '<p class="hint">' +
+          L('服务器未启用推送提醒。', 'Push notifications are disabled on the server.') + '</p>') +
+      '</section>'
     );
   }
 
@@ -2425,6 +2613,7 @@
         authors: d.accessAuthors.slice(),
         readers: d.accessReaders.slice()
       };
+      payload.notify = Boolean(d.notify);
     }
     var created = fromLocalInput(d.created_at);
     if (created) payload.created_at = created;
@@ -2473,6 +2662,12 @@
                 ? L(aiReason + '，等待管理员审核', aiReason + ' — waiting for admin review')
                 : L('已提交审核，管理员通过后公开', 'Submitted for review; it goes public after admin approval'))
               : L('文章已发布', 'Post published'));
+        if (data.push && data.push.enabled) {
+          setStatus(L(
+            '文章已发布 · 已提醒 ' + Number(data.push.sent || 0) + ' 位订阅者',
+            'Post published · notified ' + Number(data.push.sent || 0) + ' subscriber(s)'
+          ));
+        }
         location.hash = '#/admin/edit/' + encodeURIComponent(post.slug);
       } else {
         state.draft = postToDraft(post);
@@ -2493,6 +2688,31 @@
       updatePublishButton();
       if (authError(e)) return;
       setStatus(e.message, 'error');
+    }
+  }
+
+  async function notifyPost(slug) {
+    if (!state.isAdmin || !slug) return;
+    if (!confirm(L(
+      '向所有订阅者发送“有新文章发布”的提醒？提醒不包含文章内容。',
+      'Send a "new post" notification to every subscriber? It contains no article content.'
+    ))) return;
+    setStatus(L('正在发送提醒…', 'Sending notifications…'));
+    try {
+      var data = await request('/admin/push/notify', {
+        method: 'POST',
+        body: { slug: slug },
+        auth: true
+      });
+      var sent = Number(data.sent || 0);
+      var failed = Number(data.failed || 0);
+      setStatus(failed
+        ? L('提醒已发送：成功 ' + sent + ' 个，失败 ' + failed + ' 个',
+          'Notifications sent: ' + sent + ' delivered, ' + failed + ' failed')
+        : L('提醒已发送给 ' + sent + ' 个订阅者',
+          'Notification sent to ' + sent + ' subscriber(s)'));
+    } catch (e) {
+      if (!authError(e)) setStatus(e.message, 'error');
     }
   }
 
@@ -3078,6 +3298,9 @@
       case 'publish':
         savePost();
         break;
+      case 'notify-post':
+        notifyPost(slug || state.editingSlug);
+        break;
       case 'editor-tab':
         setEditorTab(target.dataset.tab || 'write');
         break;
@@ -3199,6 +3422,11 @@
       return;
     }
 
+    if (target.dataset && target.dataset.notify !== undefined) {
+      state.draft.notify = Boolean(target.checked);
+      return;
+    }
+
     if (target.dataset && target.dataset.accessKind) {
       var accessKey = target.dataset.accessKind === 'reader' ? 'accessReaders' : 'accessAuthors';
       var accessName = target.dataset.accessName || '';
@@ -3302,6 +3530,10 @@
     }
   });
 
+  if (navSubscribe) {
+    navSubscribe.addEventListener('click', togglePushSubscription);
+  }
+
   if (navLogin) {
     navLogin.addEventListener('click', function () {
       if (PAGE !== 'public') return;
@@ -3375,6 +3607,7 @@
     updateTopbar();
     setDefaultStatus();
     await renderRoute();
+    if (PAGE === 'public') setupPush();
   }
 
   init();
