@@ -6,7 +6,7 @@ const SCOPE_PATH = new URL(self.registration.scope).pathname;
 const SHELL_URL = new URL('index.html', self.registration.scope).href;
 const SHELL_FILES = [
   'index.html', 'styles.css', 'md-renderer.css',
-  'app.js', 'md-renderer.js', 'md-latex.js', 'md-images.js', 'md-files.js', 'md-pdf.js', 'md-export.js',
+  'boot.js', 'app.js', 'md-renderer.js', 'md-latex.js', 'md-images.js', 'md-files.js', 'md-pdf.js', 'md-export.js',
   'vendor/marked.umd.js', 'vendor/purify.min.js', 'vendor/highlight.min.js',
   'vendor/katex.min.js', 'vendor/katex.min.css'
 ];

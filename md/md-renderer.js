@@ -575,8 +575,10 @@
   function sanitize(html) {
     return DOMPurify.sanitize(html, {
       USE_PROFILES:{ html:true, svg:true, svgFilters:true },
-      FORBID_TAGS:['form','button','select','option','optgroup','datalist','textarea','label','fieldset','legend','output','meter','progress','dialog','iframe','object','embed','video','audio'],
-      FORBID_ATTR:['name','srcset','autofocus','tabindex','hidden'],
+      // <style> stays allowed: inline SVG diagrams keep their scoped styles, and
+      // prepareContent() removes every <style> outside an <svg>.
+      FORBID_TAGS:['form','button','select','option','optgroup','datalist','textarea','label','fieldset','legend','output','meter','progress','dialog','iframe','frame','frameset','object','embed','applet','video','audio','link','meta','base','template','noscript'],
+      FORBID_ATTR:['name','srcset','autofocus','tabindex','hidden','srcdoc','formaction','http-equiv','ping'],
       ALLOW_DATA_ATTR:false,
       ADD_ATTR:['data-md-math']
     });
