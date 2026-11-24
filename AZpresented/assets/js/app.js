@@ -96,7 +96,7 @@
     var changed = currentTheme() !== next;
     document.documentElement.setAttribute('data-theme', next);
     var meta = document.getElementById('theme-color');
-    if (meta) meta.setAttribute('content', next === 'dark' ? '#171315' : '#ffffff');
+    if (meta) meta.setAttribute('content', next === 'dark' ? '#141116' : '#ffffff');
     if (persist) {
       try {
         localStorage.setItem(THEME_KEY, next);
@@ -115,6 +115,7 @@
   var SERVER_ERRORS = {
     '令牌无效': 'Invalid token',
     '尝试次数过多，请稍后再试': 'Too many attempts. Try again later.',
+    '请求过于频繁，请稍后再试': 'Too many requests. Try again later.',
     '请求体过大': 'Request body too large',
     '图片内容为空': 'The image is empty',
     '不支持的图片格式': 'Unsupported image format',
@@ -157,6 +158,7 @@
     '订阅地址无效': 'Invalid subscription endpoint',
     '订阅密钥无效': 'Invalid subscription keys',
     '订阅数量已达到上限': 'Subscription limit reached',
+    '今日新增订阅已达上限': 'Daily subscription limit reached',
     '私密文章不能发送提醒': 'Private posts cannot be notified'
   };
 
@@ -1334,7 +1336,8 @@
       '</div>' +
       '<div class="reader-shell">' +
       '<iframe class="reader-frame" src="' + esc(readerUrl) + '" title="' + esc(post.title) +
-      '" loading="eager" referrerpolicy="no-referrer"></iframe>' +
+      '" loading="eager" referrerpolicy="no-referrer"' +
+      ' sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"></iframe>' +
       '</div>' +
       '</section></div>'
     );
@@ -2081,7 +2084,8 @@
           (open
             ? '<div class="review-preview"><iframe class="reader-frame" src="' +
               esc(rendererUrlFromMarkdown(item.content)) + '" title="' + esc(item.title) +
-              '" loading="lazy" referrerpolicy="no-referrer"></iframe></div>'
+              '" loading="lazy" referrerpolicy="no-referrer"' +
+              ' sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"></iframe></div>'
             : '') +
           '</div>'
         );
@@ -2662,10 +2666,10 @@
                 ? L(aiReason + '，等待管理员审核', aiReason + ' — waiting for admin review')
                 : L('已提交审核，管理员通过后公开', 'Submitted for review; it goes public after admin approval'))
               : L('文章已发布', 'Post published'));
-        if (data.push && data.push.enabled) {
+        if (data.push && data.push.queued) {
           setStatus(L(
-            '文章已发布 · 已提醒 ' + Number(data.push.sent || 0) + ' 位订阅者',
-            'Post published · notified ' + Number(data.push.sent || 0) + ' subscriber(s)'
+            '文章已发布 · 正在提醒 ' + Number(data.push.subscribers || 0) + ' 位订阅者',
+            'Post published · notifying ' + Number(data.push.subscribers || 0) + ' subscriber(s)'
           ));
         }
         location.hash = '#/admin/edit/' + encodeURIComponent(post.slug);
@@ -2704,13 +2708,11 @@
         body: { slug: slug },
         auth: true
       });
-      var sent = Number(data.sent || 0);
-      var failed = Number(data.failed || 0);
-      setStatus(failed
-        ? L('提醒已发送：成功 ' + sent + ' 个，失败 ' + failed + ' 个',
-          'Notifications sent: ' + sent + ' delivered, ' + failed + ' failed')
-        : L('提醒已发送给 ' + sent + ' 个订阅者',
-          'Notification sent to ' + sent + ' subscriber(s)'));
+      var count = Number(data.subscribers || 0);
+      setStatus(data.queued
+        ? L('已开始向 ' + count + ' 位订阅者发送提醒',
+          'Sending notifications to ' + count + ' subscriber(s)')
+        : L('当前没有订阅者', 'There are no subscribers yet'));
     } catch (e) {
       if (!authError(e)) setStatus(e.message, 'error');
     }
@@ -3034,6 +3036,7 @@
       frame.className = 'reader-frame';
       frame.title = L('Markdown 预览', 'Markdown preview');
       frame.setAttribute('referrerpolicy', 'no-referrer');
+      frame.setAttribute('sandbox', 'allow-scripts allow-popups allow-popups-to-escape-sandbox');
       box.appendChild(frame);
     }
     frame.src = rendererUrlFromMarkdown(state.draft.content);
